@@ -1,0 +1,27 @@
+version: '3.3'
+
+services:
+  fastapi:
+    image: registry.met.no/s-enda/data-visualization-services/container-fastapi:main
+    environment:
+        DEBUG: 1
+        PYTHONUNBUFFERED: 1
+        LOGLEVEL: DEBUG
+        FORWARDED_ALLOW_IPS: "*"
+        MAPSERVER_HOST: mapserver
+    volumes:
+      - ./mapgen:/app
+      - mapfiles:/app/static/mapfiles
+    ports:
+      - 8080:80
+
+  mapserver:
+    image: registry.met.no/s-enda/container-mapserver:latest
+    volumes:
+      - mapfiles:/etc/mapserver/
+    ports:
+      - 80:8080
+
+
+volumes:
+     mapfiles: 

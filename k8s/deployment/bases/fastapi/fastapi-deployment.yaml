@@ -1,0 +1,64 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+spec:
+  replicas: 1
+  template:
+    spec:
+#      affinity:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#              - matchExpressions:
+#                  - key: met.no/lustre
+#                    operator: Exists
+      containers:
+        - name: app
+          image: registry.met.no/s-enda/container-fastapi:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /app/static/mapfiles/mapserver-demo.map
+              subPath: mapserver-demo.map
+              name: mapserver-map
+            - mountPath: /lustre/storeA/project/metproduction/products/satdata_polar/senda
+#             subPath: senda
+              name: mapserver-storea
+            - mountPath:/app/static/mapfile/
+#             subPath: mapfiles
+              name: fastapi-static-mapfiles
+      imagePullSecrets:
+        - name: regcred
+      volumes:
+        - name: mapserver-storea
+          hostPath:
+            path: /lustre/storeA/project/metproduction/products/satdata_polar/senda
+        - name: tmpfs
+          emptyDir:
+            medium: Memory
+        - name: mapserver-map
+          configMap:
+            name: mapserver-map-config
+                - name: mapserver-map
+        - name: fastapi-static-mapfiles
+          configMap:
+            name: mapserver-map-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapserver
+  labels:
+    app.kubernetes.io/name: mapserver
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
