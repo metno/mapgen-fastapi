@@ -6,7 +6,7 @@ MAP
   WEB
     METADATA
       "wms_title"          "WMS senda test/demo server localhost"  ##required
-      "wms_onlineresource" "http://localhost:8081/cgi-bin/mapserv?map={{map_file_name}}&"   ##required
+      "wms_onlineresource" "https://{{mapserver_url}}?map={{map_file_name}}&"   ##required
       "wms_srs"            "EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857"  ##recommended
       "wms_enable_request" "*"   ##necessary
     END

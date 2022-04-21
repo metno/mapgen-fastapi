@@ -19,10 +19,11 @@ async def get_mapserv(netcdf_path: str,
                                                title='Mapfile', 
                                                description='Data to fill in a mapfile template')):
     print("1",netcdf_path)
-    print(request.method)
-    print(request.path_params)
-    print(config_dict)
-    print(os.getcwd())
+    print("URL", request.url)
+    print("METHOD", request.method)
+    print("PATH PARAMS", request.path_params)
+    print("CONFIG_DICT", config_dict)
+    print("CURRENT DIR", os.getcwd())
     default_regexp_config_file = '/config/url-path-regexp-patterns.yaml'
     regexp_config_file = default_regexp_config_file
     #if os.path.exists(regexp_config_file):
@@ -47,18 +48,24 @@ async def get_mapserv(netcdf_path: str,
                 print("No match")
     except Exception:
         print("Something failed")
-    if regexp_pattern_module:
-        try:
-            loaded_module = importlib.import_module(regexp_pattern_module['module'])
-        except ModuleNotFoundError as e:
-            print("Failed to load module:", regexp_pattern_module['module'], str(e))
-        if loaded_module:
-            getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path)
-    if config_dict:
-        # redirect to given or generated link 
-        mapfile_url = make_mapfile(config_dict)
-    else:
-         mapfile_url = "http://nbswms.met.no/thredds/wms_ql/NBS/S1A/2021/05/18/EW/S1A_EW_GRDM_1SDH_20210518T070428_20210518T070534_037939_047A42_65CD.nc?SERVICE=WMS&REQUEST=GetCapabilities"
+    netcdf_file_name, _ = os.path.splitext(os.path.basename(netcdf_path))
+    map_file_name = os.path.join("/mapfiles", netcdf_file_name + ".map")
+    if not os.path.exists(map_file_name):
+        if regexp_pattern_module:
+            try:
+                loaded_module = importlib.import_module(regexp_pattern_module['module'])
+            except ModuleNotFoundError as e:
+                print("Failed to load module:", regexp_pattern_module['module'], str(e))
+            if loaded_module:
+                getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_file_name, map_file_name)
+
+    mapfile_url = f"https://fastapi-dev.s-enda.k8s.met.no/mapserver?map={map_file_name}&request=getcapabilities&service=wms"
+    # if config_dict:
+    #     # redirect to given or generated link 
+    #     mapfile_url = make_mapfile(config_dict)
+    # else:
+    #      mapfile_url = "http://nbswms.met.no/thredds/wms_ql/NBS/S1A/2021/05/18/EW/S1A_EW_GRDM_1SDH_20210518T070428_20210518T070534_037939_047A42_65CD.nc?SERVICE=WMS&REQUEST=GetCapabilities"
+
     return mapfile_url
 
 # This handles a only the endpoint, but can take aditional query parameters
