@@ -3,7 +3,7 @@ import glob
 import datetime
 from jinja2 import Environment, FileSystemLoader
 
-def generate_mapfile(regexp_pattern_module, netcdf_file_name, map_file_name):
+def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
     print("Inside generate mapfile")
     env = Environment(loader=FileSystemLoader(os.path.dirname(regexp_pattern_module['mapfile_template'])))
     mt = env.get_template(os.path.basename(regexp_pattern_module['mapfile_template']))
@@ -11,6 +11,7 @@ def generate_mapfile(regexp_pattern_module, netcdf_file_name, map_file_name):
     start_time = datetime.datetime.strptime(netcdf_file_name.split("-")[-2], '%Y%m%d%H%M%S')
     print(start_time)
     base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda/'
+    base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
     previews = glob.glob(f'{base_dir}*{start_time:%Y%m%d_%H%M%S}.tif')
     print(previews)
     layers_render_data = []
@@ -24,6 +25,7 @@ def generate_mapfile(regexp_pattern_module, netcdf_file_name, map_file_name):
 
     redered_map_template = mt.render(layers=layers_render_data,
                                      map_file_name=map_file_name,
+                                     netcdf_path=netcdf_path,
                                      mapserver_url='fastapi-dev.s-enda.k8s.met.no/mapserver')
     print(redered_map_template)
 

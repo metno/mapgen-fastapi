@@ -20,6 +20,12 @@ async def get_mapserv(netcdf_path: str,
                                                description='Data to fill in a mapfile template')):
     print("1",netcdf_path)
     print("URL", request.url)
+    print(dir(request.url))
+    print("Hostname:", request.url.hostname)
+    print("is_secure", request.url.is_secure)
+    print("scheme", request.url.scheme)
+    print("query", request.url.query)
+    print("netloc", request.url.netloc)
     print("METHOD", request.method)
     print("PATH PARAMS", request.path_params)
     print("CONFIG_DICT", config_dict)
@@ -31,7 +37,7 @@ async def get_mapserv(netcdf_path: str,
     #        regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
     regexp_config = {}
     regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
-                                                 {'pattern': '^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19)-avhrr-(\d{14})-(\d{14})\.nc$',
+                                                 {'pattern': '^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20)-(avhrr|viirs-mband)-(\d{14})-(\d{14})\.nc$',
                                                   'module': 'modules.satellite_thredds_module',
                                                   'mapfile_template': '/app/templates/mapfile.map'},
                                                  {'pattern':'another', 'module': 'third_module'}]
@@ -57,12 +63,13 @@ async def get_mapserv(netcdf_path: str,
             except ModuleNotFoundError as e:
                 print("Failed to load module:", regexp_pattern_module['module'], str(e))
             if loaded_module:
-                getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_file_name, map_file_name)
+                getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name)
 
-    mapfile_url = f"https://fastapi-dev.s-enda.k8s.met.no/mapserver?map={map_file_name}&request=getcapabilities&service=wms"
+    mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
+    
     # if config_dict:
     #     # redirect to given or generated link 
-    #     mapfile_url = make_mapfile(config_dict)
+        #     mapfile_url = make_mapfile(config_dict)
     # else:
     #      mapfile_url = "http://nbswms.met.no/thredds/wms_ql/NBS/S1A/2021/05/18/EW/S1A_EW_GRDM_1SDH_20210518T070428_20210518T070534_037939_047A42_65CD.nc?SERVICE=WMS&REQUEST=GetCapabilities"
 
