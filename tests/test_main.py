@@ -12,12 +12,23 @@ client = TestClient(app)
 def run_before_and_after_tests():
     """Fixture to execute asserts before and after a test is run"""
     # Setup: fill with any logic you want
+    if not os.path.exists('mapfiles'):
+        os.mkdir('mapfiles')
+    if not os.path.exists('lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'):
+        os.makedirs('lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/')
+    quicklooks_stamps = ['20220427_122315.tif', '20220427_113327.tif', '20220427_124247.tif',
+                         '20220427_115541.tif', '20220427_121037.tif']
+    for quicklook_type in ['overview', 'natural_with_night_fog']:
+        for stamp in quicklooks_stamps:
+            open(os.path.join('lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/', quicklook_type + '_' + stamp), 'w').close()
 
     yield # this is where the testing happens
 
     # Teardown : fill with any logic you want
     if os.path.exists('mapfiles'):
         shutil.rmtree('mapfiles')
+    if os.path.exists('lustre'):
+        shutil.rmtree('lustre')
 
 def test_read_main():
     response = client.get("/api/get_mapserv", allow_redirects=False)

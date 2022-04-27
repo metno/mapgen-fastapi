@@ -12,7 +12,7 @@ def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_f
     start_time = datetime.datetime.strptime(netcdf_file_name.split("-")[-2], '%Y%m%d%H%M%S')
     print(start_time)
     base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda/'
-    base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
+    base_dir = 'lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
     previews = glob.glob(f'{base_dir}*{start_time:%Y%m%d_%H%M%S}.tif')
     print(previews)
     if not len(previews):
