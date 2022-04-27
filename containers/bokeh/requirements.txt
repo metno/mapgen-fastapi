@@ -1,0 +1,21 @@
+requests
+
+ipykernel==5.5.5
+json2html
+waiting
+ipyleaflet==0.14.0
+panel
+# holoviews
+# geoviews
+# datashader
+bokeh==2.3.3
+ipywidgets_bokeh==1.0.2
+
+netCDF4
+xarray
+
+rasterio
+owslib
+geolinks
+ipydatetime
+shapely
