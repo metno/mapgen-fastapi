@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 
 def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
     print("Inside generate mapfile")
+    print(os.path.dirname(regexp_pattern_module['mapfile_template']))
     env = Environment(loader=FileSystemLoader(os.path.dirname(regexp_pattern_module['mapfile_template'])))
     mt = env.get_template(os.path.basename(regexp_pattern_module['mapfile_template']))
 
@@ -14,6 +15,10 @@ def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_f
     base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
     previews = glob.glob(f'{base_dir}*{start_time:%Y%m%d_%H%M%S}.tif')
     print(previews)
+    if not len(previews):
+        # No previews found. No need to generate map config file
+        return False
+
     layers_render_data = []
     for preview in previews:
         base_preview, _ = os.path.splitext(os.path.basename(preview))

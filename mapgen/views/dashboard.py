@@ -1,7 +1,7 @@
 import base64
 import fastapi
 from typing import List
-from models.datasource import Datasource
+from mapgen.models.datasource import Datasource
 from starlette.requests import Request
 from starlette.templating import Jinja2Templates
 from fastapi import Query

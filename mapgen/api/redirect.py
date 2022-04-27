@@ -5,9 +5,9 @@ import importlib
 from importlib.abc import Loader
 
 from distutils.command.config import config
-from fastapi.responses import RedirectResponse
-from fastapi import Request, Query, APIRouter
-from worker import make_mapfile
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import Request, Query, APIRouter, status
+from mapgen.worker import make_mapfile
 
 router = APIRouter()
 
@@ -20,7 +20,6 @@ async def get_mapserv(netcdf_path: str,
                                                description='Data to fill in a mapfile template')):
     print("1",netcdf_path)
     print("URL", request.url)
-    print(dir(request.url))
     print("Hostname:", request.url.hostname)
     print("is_secure", request.url.is_secure)
     print("scheme", request.url.scheme)
@@ -37,9 +36,9 @@ async def get_mapserv(netcdf_path: str,
     #        regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
     regexp_config = {}
     regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
-                                                 {'pattern': '^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20)-(avhrr|viirs-mband)-(\d{14})-(\d{14})\.nc$',
-                                                  'module': 'modules.satellite_thredds_module',
-                                                  'mapfile_template': '/app/templates/mapfile.map'},
+                                                 {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                                                  'module': 'mapgen.modules.satellite_thredds_module',
+                                                  'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map'},
                                                  {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
@@ -54,8 +53,16 @@ async def get_mapserv(netcdf_path: str,
                 print("No match")
     except Exception:
         print("Something failed")
+
+    if not regexp_pattern_module:
+        return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content={"message": "Could not match against any pattern. Check the config."})
+
     netcdf_file_name, _ = os.path.splitext(os.path.basename(netcdf_path))
-    map_file_name = os.path.join("/mapfiles", netcdf_file_name + ".map")
+    try:
+        os.mkdir("mapfiles")
+    except FileExistsError:
+        pass
+    map_file_name = os.path.join("mapfiles", netcdf_file_name + ".map")
     if not os.path.exists(map_file_name):
         if regexp_pattern_module:
             try:
@@ -63,16 +70,11 @@ async def get_mapserv(netcdf_path: str,
             except ModuleNotFoundError as e:
                 print("Failed to load module:", regexp_pattern_module['module'], str(e))
             if loaded_module:
-                getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name)
+                if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
+                    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find and quicklooks. No map file generated."})
 
     mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
     
-    # if config_dict:
-    #     # redirect to given or generated link 
-        #     mapfile_url = make_mapfile(config_dict)
-    # else:
-    #      mapfile_url = "http://nbswms.met.no/thredds/wms_ql/NBS/S1A/2021/05/18/EW/S1A_EW_GRDM_1SDH_20210518T070428_20210518T070534_037939_047A42_65CD.nc?SERVICE=WMS&REQUEST=GetCapabilities"
-
     return mapfile_url
 
 # This handles a only the endpoint, but can take aditional query parameters
@@ -90,5 +92,3 @@ async def get_mapserv(request: Request,
     else:
          mapfile_url = "http://nbswms.met.no/thredds/wms_ql/NBS/S1A/2021/05/18/EW/S1A_EW_GRDM_1SDH_20210518T070428_20210518T070534_037939_047A42_65CD.nc?SERVICE=WMS&REQUEST=GetCapabilities"
     return mapfile_url
-
-
