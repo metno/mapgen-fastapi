@@ -1,0 +1,6 @@
+mapgen/__pycache__/
+mapgen/api/__pycache__/
+mapgen/models/__pycache__/
+mapgen/modules/__pycache__/
+mapgen/views/__pycache__/
+tests/__pycache__/
