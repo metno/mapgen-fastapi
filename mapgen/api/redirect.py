@@ -53,6 +53,7 @@ async def get_mapserv(netcdf_path: str,
                 print("No match")
     except Exception:
         print("Something failed")
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Exception raised when regexp. Check the config."})
 
     if not regexp_pattern_module:
         return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content={"message": "Could not match against any pattern. Check the config."})
@@ -69,6 +70,7 @@ async def get_mapserv(netcdf_path: str,
                 loaded_module = importlib.import_module(regexp_pattern_module['module'])
             except ModuleNotFoundError as e:
                 print("Failed to load module:", regexp_pattern_module['module'], str(e))
+                return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to load module {regexp_pattern_module['module']}"})
             if loaded_module:
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
                     return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find and quicklooks. No map file generated."})
@@ -86,6 +88,7 @@ async def get_mapserv(request: Request,
     print("2", request.method)
     print(request.query_params)
     print(request.path_params)
+    print(config_dict)
     if config_dict:
         # redirect to given or generated link 
         mapfile_url = make_mapfile(config_dict)
