@@ -17,6 +17,6 @@ async def get_dashboard(request: Request,
                                                  title="dict of data",
                                                  description="dict of data and meta informations")):
     decode_data = base64.urlsafe_b64decode(data)
-    input_data = json.dumps(json.loads(decode_data), indent=4, sort_keys=True) 
-    print(input_data)
+    #input_data = json.dumps(json.loads(decode_data), indent=4, sort_keys=True) 
+    #print(input_data)
     

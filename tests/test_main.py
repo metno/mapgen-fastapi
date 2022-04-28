@@ -5,6 +5,7 @@ import pytest
 import shutil
 from fastapi.testclient import TestClient
 #import unittest.mock as mock
+import base64
 
 from mapgen.main import app
 
@@ -86,9 +87,20 @@ def test_fail_load_module(import_module):
 
 # @patch('getattr', side_effect=False)
 # def test_fail_call_module(call_module):
+#     """This is not working yet but only covers one line of code"""
 #     netcdf_path = "metopb-avhrr-20220427124247-20220427125242.nc"
 #     response = client.get(path + netcdf_path, allow_redirects=False)
 #     print(response.text)
 #     print(response.json()['message'])
 #     assert response.status_code == 500
 #     assert response.json()['message'] == "Failed to load module mapgen.modules.satellite_thredds_module"
+
+def test_get_dashboard():
+    """This is not finished"""
+    dd = base64.urlsafe_b64encode('teststring'.encode('ascii'))
+    print(dd)
+    dashboard_get = '/dashboard?data=' + str(dd)
+    response = client.get(dashboard_get)
+    print(response.text)
+    print(response.status_code)
+    assert response.status_code == 200
