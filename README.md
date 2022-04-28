@@ -1,5 +1,5 @@
 [![pytest](https://github.com/metno/mapgen-fastapi/actions/workflows/pytest.yml/badge.svg)](https://github.com/metno/mapgen-fastapi/actions/workflows/pytest.yml)
-[![codecov](https://codecov.io/gh/metno/mapgen-fastapi/branch/main/graph/badge.svg?token=d6fc1817-897f-483a-8474-17086bd669fb)](https://codecov.io/gh/metno/mapgen-fastapi)
+[![codecov](https://codecov.io/gh/metno/mapgen-fastapi/branch/main/graph/badge.svg?token=51f2899b-a546-4fc5-b7cf-10043dbff212)](https://codecov.io/gh/metno/mapgen-fastapi)
 [![flake8](https://github.com/metno/mapgen-fastapi/actions/workflows/syntax.yml/badge.svg?branch=main)](https://github.com/metno/mapgen-fastapi/actions/workflows/syntax.yml)
 # mapgen-fastapi
 

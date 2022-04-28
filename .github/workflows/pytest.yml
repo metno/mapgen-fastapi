@@ -27,6 +27,9 @@ jobs:
           pip install pytest-timeout
           pip install pytest-cov
       - name: Run Tests
-        run: python -m pytest -v --cov=mapgen-fastapi --timeout=60
+        run: python -m pytest -v --cov=mapgen-fastapi --cov-report=xml --timeout=60
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
