@@ -9,7 +9,21 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request, Query, APIRouter, status
 from mapgen.worker import make_mapfile
 
+import boto3
+from botocore.exceptions import ClientError
+
 router = APIRouter()
+
+def upload_mapfile_to_ceph(map_file_name, bucket):
+    s3_client = boto3.client('s3', 
+                             aws_access_key_id=os.environ['S3_ACCESS_KEY'],
+                             aws_secret_access_key=os.environ['S3_SECRET_KEY'])
+    try:
+        response = s3_client.upload_file(map_file_name, bucket, os.path.basename(map_file_name))
+        print(response)
+    except ClientError as e:
+        return False
+    return True   
 
 # This handles a path in adition to the endpoint. This path can be to a netcdf file.
 @router.get("/api/get_mapserv/{netcdf_path:path}", response_class=RedirectResponse)
@@ -38,7 +52,8 @@ async def get_mapserv(netcdf_path: str,
     regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
                                                  {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
                                                   'module': 'mapgen.modules.satellite_thredds_module',
-                                                  'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map'},
+                                                  'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                                  'bucket': 's-enda-mapfiles'},
                                                  {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
@@ -74,6 +89,9 @@ async def get_mapserv(netcdf_path: str,
             if loaded_module:
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
                     return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find and quicklooks. No map file generated."})
+                else:
+                    if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['bucket']):
+                        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to upload map_file_name {map_file_name} to ceph."})
 
     mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
     

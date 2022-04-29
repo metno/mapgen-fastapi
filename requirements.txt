@@ -4,3 +4,4 @@ pytest-mock
 uvicorn
 requests
 fastapi
+boto3

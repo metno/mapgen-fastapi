@@ -26,6 +26,10 @@ def run_before_and_after_tests():
         for stamp in quicklooks_stamps:
             open(os.path.join('lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/', quicklook_type + '_' + stamp), 'w').close()
 
+    # Need some envs
+    os.environ['S3_ACCESS_KEY'] = "test s3 access key"
+    os.environ['S3_SECRET_KEY'] = "test s3 secret key"
+    
     yield # this is where the testing happens
 
     # Teardown : fill with any logic you want
@@ -50,10 +54,12 @@ def test_read_main_with_config_dict():
     assert response.text == ""
 
 path = "/api/get_mapserv/satellite-thredds/polar-swath/2022/04/27/"
+@patch('mapgen.api.redirect.upload_mapfile_to_ceph')
 @pytest.mark.parametrize("netcdf_path", ["metopb-avhrr-20220427124247-20220427125242.nc", "metopc-avhrr-20220427115541-20220427120710.nc", "noaa19-avhrr-20220427121037-20220427121853.nc",
                                          "noaa20-viirs-mband-20220427113327-20220427114740.nc", "noaa20-viirs-iband-20220427113327-20220427114740.nc", "noaa20-viirs-dnb-20220427113327-20220427114740.nc",
                                          "npp-viirs-mband-20220427122315-20220427123728.nc", "npp-viirs-iband-20220427122315-20220427123728.nc", "npp-viirs-dnb-20220427122315-20220427123728.nc"])
-def test_get_netcdf(netcdf_path):
+def test_get_netcdf(upload_patch, netcdf_path):
+    upload_patch.return_value = True
     response = client.get(path + netcdf_path, allow_redirects=False)
     print(response.text)
     assert response.status_code == 307
