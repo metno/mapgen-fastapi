@@ -73,7 +73,7 @@ async def get_mapserv(netcdf_path: str,
                 return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to load module {regexp_pattern_module['module']}"})
             if loaded_module:
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
-                    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find and quicklooks. No map file generated."})
+                    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find any quicklooks. No map file generated."})
 
     mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
     
