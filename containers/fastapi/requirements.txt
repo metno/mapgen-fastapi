@@ -14,3 +14,5 @@ httptools
 redis
 redisearch
 pyyaml
+bokeh==2.3.3
+xarray
