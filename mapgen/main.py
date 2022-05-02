@@ -1,8 +1,8 @@
 import fastapi
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
-from views import dashboard
-from api import redirect
+from mapgen.views import dashboard
+from mapgen.api import redirect
 
 
 app = fastapi.FastAPI(title="MapGen",
