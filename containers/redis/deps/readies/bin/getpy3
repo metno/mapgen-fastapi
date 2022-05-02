@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+
+# Check that Python 3 is installed (by checking for python and python3 commands).
+# If so, verify that python3 command is present.
+# If Python 3 is not found on the system, try to install it and repeat the abose checks.
+
+PROGNAME="${BASH_SOURCE[0]}"
+HERE="$(cd "$(dirname "$PROGNAME")" &>/dev/null && pwd)"
+ROOT=$(cd $HERE/../.. && pwd)
+READIES=$ROOT/readies
+. $READIES/shibumi/defs
+
+if [[ -f /etc/os-release ]]; then
+    osver=$(source /etc/os-release; echo "${ID}${VERSION_ID}")
+fi
+
+if [[ $1 == --help || $1 == help || $HELP == 1 ]]; then
+	cat <<-END
+		[ARGVARS...] getpy3 [--help|help]
+
+		Argument variables:
+		MYPY=path    Use specific Python interpreter (install pip & requirements)
+		CHECK=1      Only check and report, do not install
+		PIP=0        Avoid installing pip
+		PIP=version  Also install pip of the specified version
+		VENV=1       Install virtualenv
+		VENV=dir     Install virtualenv, create one in `dir`
+		FORCE=1      Install even if present
+		FIX=1        Create /usr/local/bin/python3 symlink (default on macOS)
+		VERBOSE=1    Print commands
+		HELP=1       Print help
+
+	END
+	exit 0
+fi
+
+[[ $VERBOSE == 1 ]] && { set -x; PS4='$LINENO: '; }
+[[ -z $PIP ]] && PIP=1
+
+SUDO=
+if [[ $(id -u) != 0 ]]; then
+	if is_command sudo; then
+		SUDO=sudo
+	fi
+fi
+
+# pip 20.x is broken is the sense that it will not respect virtualenv's system-site-packages
+# thus requiring packages to be built from source in order to be installed.
+# Until this is fixed we stick to pip 19.3.1.
+# [[ $PIP == 1 ]] && PIP=19.3.1
+
+# the end state should be:
+# in a python2 venv: `python` command (don't fix)
+# in a non-python2 venv or outside venv:
+#   mandatory: `python3` command (fix)
+#   optional: `python` command (don't fix)
+
+fix_variants() {
+	if [[ -n $VIRTUAL_ENV ]]; then
+		[[ -n $PYTHON && "$PYTHON_VER" == "3"  ]] && return
+	fi
+
+	if [[ -z $PYTHON3 ]]; then
+		if [[ -n $PYTHON && "$PYTHON_VER" == "3"  ]]; then
+			ln -sf $PYTHON /usr/local/bin/python3
+		fi
+	fi
+}
+
+check_variants() {
+	if [[ -n $MYPY ]]; then
+		PYTHON=$MYPY
+		PYTHON2=$MYPY
+		PYTHON27=$MYPY
+		return
+	fi
+	PYTHON=$(command -v python)
+	PYTHON3=$(command -v python3)
+
+	MYPY=""
+	PYTHON_VER=""
+
+	if [[ -n $PYTHON ]]; then
+		PYTHON_VER="$(python --version 2>&1 | awk '{print $2}' | cut -d. -f1)"
+		[[ $PYTHON_VER == 3 ]] && MYPY=$PYTHON
+	fi
+
+	[[ -n $PYTHON3 ]] && MYPY=$PYTHON3
+
+	export MINOR="$($MYPY --version 2>&1 | awk '{print $2}' | cut -d. -f2)"
+	# Python3 <= 3.4 breaks contemporary pip
+	if (( MINOR <= 5 )); then export FORCE=1; fi
+
+	if [[ -n $FIX ]]; then fix_variants; fi
+}
+
+install_python_on_old_ubuntu() {
+	#PYTHON=1 $READIES/bin/getconda
+
+	# ppa:deadsnakes no longer provides for xenial, trusty
+	 export DEBIAN_FRONTEND=noninteractive
+	 runn $SUDO apt-get install --fix-missing -y software-properties-common
+	 runn $SUDO add-apt-repository -y ppa:fkrull/deadsnakes
+	 runn $SUDO apt-get -qq update
+	 runn $SUDO apt-get install --fix-missing -y python3.6
+	 runn ln -sf `command -v python3.6` /usr/local/bin/python3
+	 runn $SUDO apt-get install --fix-missing -y python3.6-venv
+}
+
+install_python() {
+	if [[ $(uname) == Darwin ]]; then
+		if ! is_command brew; then
+			eprint "Unable to install Python without brew. Aborting."
+			eprint "Please install brew and retry."
+			exit 1
+		fi
+
+		# try to fix /usr/local/bin/python on macOS unless stated otherwize
+		[[ $FIX != 0 ]] && export FIX=1
+	fi
+
+	if is_command apt-get; then
+		export DEBIAN_FRONTEND=noninteractive
+		runn $SUDO apt-get -qq update --fix-missing
+		if [[ $osver == ubuntu14.04 || $osver == ubuntu16.04 ]]; then
+			install_python_on_old_ubuntu
+		elif [[ $osver == debian9 ]]; then
+			$SUDO $READIES/bin/getget
+
+			runn $SUDO apt-get install --fix-missing -y \
+				software-properties-common apt-transport-https \
+				unzip lsb-release gnupg2 \
+				libbz2-dev libssl-dev libsqlite3-dev libreadline-dev libgdbm-dev tk-dev libncursesw5-dev liblzma-dev uuid-dev libexpat1-dev
+            mkdir -p /tmp/PKGS
+            amhere=`pwd`
+            cd /tmp/PKGS
+            runn wget https://github.com/chriskuehl/python3.6-debian-stretch/releases/download/v3.6.3-1-deb9u1/{python3.6_3.6.3-1.deb9u1_amd64,python3.6-minimal_3.6.3-1.deb9u1_amd64,python3.6-dev_3.6.3-1.deb9u1_amd64,libpython3.6_3.6.3-1.deb9u1_amd64,libpython3.6-minimal_3.6.3-1.deb9u1_amd64,libpython3.6-stdlib_3.6.3-1.deb9u1_amd64,libpython3.6-dev_3.6.3-1.deb9u1_amd64}.deb
+            runn $SUDO dpkg -i *.deb
+			[[ -f /usr/bin/python3.6 ]] && ln -sf /usr/bin/python3.6 /usr/local/bin/python3
+            cd $amhere
+		else
+			runn $SUDO apt-get install --fix-missing -y python3
+		fi
+	elif is_command dnf; then
+		runn $SUDO dnf install -y python3
+	elif is_command yum; then
+		runn $SUDO yum install -y epel-release
+		runn $SUDO yum install -y python36
+	elif is_command zypper; then
+		runn $SUDO zypper install -y python3
+	elif is_command apk; then
+		runn $SUDO apk update
+		runn $SUDO apk add python3 python3-dev
+	elif is_command brew; then
+		runn brew install python3
+	elif is_command pkg; then
+		runn $SUDO pkg install -y python3
+	elif is_command pacman; then
+		runn $SUDO pacman -Syy --noconfirm python
+	fi
+}
+
+install_pip() {
+	if [[ $FORCE != 1 ]]; then
+		[[ $($MYPY -m pip --version > /dev/null 2>&1; echo $?) == 0 ]] && return
+	fi
+	pipspec=""
+	[[ $PIP != 1 ]] && pipspec="pip==$PIP"
+
+	local packs="ca-certificates wget"
+
+	if is_command apt-get; then
+		export DEBIAN_FRONTEND=noninteractive
+		runn $SUDO apt-get -qq update --fix-missing
+		runn $SUDO apt-get install --fix-missing -y $packs
+		runn $SUDO apt-get install --fix-missing -y python3-distutils || runn $SUDO apt-get install --fix-missing -y  python3-distutils-extra
+	elif is_command dnf; then
+		runn $SUDO dnf install -y $packs
+	elif is_command yum; then
+		runn $SUDO yum install -y $packs
+	elif is_command zypper; then
+		packs+=" python-xml"
+		runn $SUDO zypper install -y $packs
+	elif is_command apk; then
+		runn $SUDO apk update
+		runn $SUDO apk add $packs
+	elif is_command brew; then
+		runn brew install wget
+	elif is_command pkg; then
+		runn $SUDO pkg install -y $packs
+	elif is_command pacman; then
+		runn $SUDO pacman -Syy --noconfirm $packs
+	fi
+
+	$MYPY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' | grep '3.6' &>/dev/null
+	if [[ $? == 0 ]]; then
+		pypi_url='https://bootstrap.pypa.io/pip/3.6/get-pip.py'
+	else
+		pypi_url='https://bootstrap.pypa.io/get-pip.py'
+	fi
+	runn wget -O /tmp/get-pip.py $pypi_url
+	# currently can fail on debian-compat platforms due to distutils:
+	# `python3 -m pip --version` will fail to find pip
+	runn "$MYPY /tmp/get-pip.py $pipspec || true"
+	runn rm -f /tmp/get-pip.py
+	runn $MYPY -m pip install --upgrade pip
+}
+
+check_variants
+
+# [[ -n $MYPY && $PIP == 0 && $FORCE != 1 ]] && exit 0
+if [[ $CHECK == 1 ]]; then
+	if $MYPY -m pip --version 2>&1 > /dev/null; then exit 0; fi
+	exit 1
+fi
+
+[[ -z $MYPY || $FORCE == 1 ]] && install_python
+
+if is_command brew; then
+	# the following is for avoiding python to be upgraded by brew silently,
+	# hence disrupting pip installaitons.
+	# this however gets trickier, as brew mighit not recognize a currently installed
+	# python version, and upgrade will fail. thus, we need to force installation, and
+	# still be graceful about failures.
+	runn "brew upgrade python || brew install python3 || true"
+fi
+
+MYPY=""
+check_variants
+if ! is_command $MYPY; then
+	eprint "Cannot install Python3. Aborting."
+	exit 1
+fi
+
+[[ $PIP != 0 ]] && install_pip
+
+PIP_USER=""
+if [[ $(uname) == Darwin ]]; then
+	PIP_USER="--user"
+fi
+
+REQ=$READIES/paella/requirements.txt
+if [[ -n $VENV && $VENV != 0 ]]; then
+	runn $MYPY -m pip install ${PIP_USER} virtualenv
+	[[ $VENV == 1 ]] && VENV=$HOME/venv
+	runn $MYPY -m virtualenv $VENV --system-site-packages
+	runn "{ . $VENV/bin/activate && python -m pip install -r $REQ; }"
+else
+	runn $MYPY -m pip install ${PIP_USER} -r $REQ
+fi
+
+exit 0
