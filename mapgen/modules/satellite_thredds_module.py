@@ -5,14 +5,17 @@ from jinja2 import Environment, FileSystemLoader
 
 def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
     print("Inside generate mapfile")
-    print(os.path.dirname(regexp_pattern_module['mapfile_template']))
-    env = Environment(loader=FileSystemLoader(os.path.dirname(regexp_pattern_module['mapfile_template'])))
+    mapfile_template_dir = os.path.dirname(regexp_pattern_module['mapfile_template'])
+    if not os.path.exists(mapfile_template_dir):
+        mapfile_template_dir = os.path.join('app', mapfile_template_dir)
+    print(mapfile_template_dir)
+    env = Environment(loader=FileSystemLoader(mapfile_template_dir))
     mt = env.get_template(os.path.basename(regexp_pattern_module['mapfile_template']))
 
     start_time = datetime.datetime.strptime(netcdf_file_name.split("-")[-2], '%Y%m%d%H%M%S')
     print(start_time)
     base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda/'
-    base_dir = 'lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
+    base_dir = '/lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/'
     previews = glob.glob(f'{base_dir}*{start_time:%Y%m%d_%H%M%S}.tif')
     print(previews)
     if not len(previews):

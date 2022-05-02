@@ -15,13 +15,14 @@ from botocore.exceptions import ClientError
 router = APIRouter()
 
 def upload_mapfile_to_ceph(map_file_name, bucket):
-    s3_client = boto3.client('s3', 
+    s3_client = boto3.client(service_name='s3',
+                             endpoint_url=os.environ['S3_ENDPOINT_URL'],
                              aws_access_key_id=os.environ['S3_ACCESS_KEY'],
                              aws_secret_access_key=os.environ['S3_SECRET_KEY'])
     try:
-        response = s3_client.upload_file(map_file_name, bucket, os.path.basename(map_file_name))
-        print(response)
+        s3_client.upload_file(map_file_name, bucket, os.path.basename(map_file_name))
     except ClientError as e:
+        print("s3 upload map file failed with: ", str(e))
         return False
     return True   
 
@@ -88,7 +89,7 @@ async def get_mapserv(netcdf_path: str,
                 return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to load module {regexp_pattern_module['module']}"})
             if loaded_module:
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
-                    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find and quicklooks. No map file generated."})
+                    return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find any quicklooks. No map file generated."})
                 else:
                     if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['bucket']):
                         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to upload map_file_name {map_file_name} to ceph."})
