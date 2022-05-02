@@ -13,9 +13,13 @@ ipywidgets_bokeh==1.0.2
 
 netCDF4
 xarray
-
-rasterio
+# rasterio is quite expensive as it requires gdal- and build-eesentials
+# rasterio
 owslib
 geolinks
 ipydatetime
 shapely
+# the following are needed to test the whole settings from the metsis project
+redis
+redisearch
+itsdangerous
