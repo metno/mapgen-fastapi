@@ -54,7 +54,8 @@ async def get_mapserv(netcdf_path: str,
                                                  {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
                                                   'module': 'mapgen.modules.satellite_thredds_module',
                                                   'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
-                                                  'bucket': 's-enda-mapfiles'},
+                                                  'map_file_bucket': 's-enda-mapfiles',
+                                                  'geotiff_bucket': 'geotiff-products-for-senda'},
                                                  {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
@@ -91,7 +92,7 @@ async def get_mapserv(netcdf_path: str,
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
                     return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find any quicklooks. No map file generated."})
                 else:
-                    if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['bucket']):
+                    if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['map_file_bucket']):
                         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to upload map_file_name {map_file_name} to ceph."})
 
     mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
