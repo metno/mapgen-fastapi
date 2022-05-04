@@ -162,3 +162,23 @@ def test_build_render_data():
     assert layers_render_data == [{'preview': '/vsicurl/test S3_ENDPOINT_URL/test S3_TENANT:test bucket/2022/04/27/overview_20220427_124247.tif',
                                    'preview_stamp': '2022-04-27T12:42:47Z',
                                    'layer_name': 'overview'}]
+
+
+@patch('boto3.client')
+def test_upload_mapfile_to_ceph(boto3_client):
+    from mapgen.api.redirect import upload_mapfile_to_ceph
+    map_file_name = ''
+    bucket = 'test bucket'
+    ret = upload_mapfile_to_ceph(map_file_name, bucket)
+    assert ret == True
+
+@patch('boto3.client')
+def test_upload_mapfile_to_ceph_except(boto3_client):
+    from mapgen.api.redirect import upload_mapfile_to_ceph
+    from botocore.exceptions import ClientError
+
+    boto3_client().upload_file.side_effect = ClientError({'Error': {}}, 'test')
+    map_file_name = ''
+    bucket = 'test bucket'
+    ret = upload_mapfile_to_ceph(map_file_name, bucket)
+    assert ret == False
