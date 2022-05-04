@@ -171,6 +171,17 @@ def test_get_mapfile_template():
     with pytest.raises(jinja2.exceptions.TemplateNotFound):
         get_mapfile_template(regexp_pattern_module)
 
+@patch('mapgen.modules.satellite_thredds_module.get_previews')
+def test_generate_mapfile_found_no_prefix(get_previews):
+    from mapgen.modules.satellite_thredds_module import generate_mapfile
+    get_previews.return_value = []
+    regexp_pattern_module = {'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map'}
+    netcdf_path = 'also-dummy'
+    netcdf_file_name = 'metopb-avhrr-20220427124247-20220427125242.nc'
+    map_file_name = 'dummy'
+    ret = generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name)
+    assert ret == False
+
 @patch('boto3.client')
 def test_upload_mapfile_to_ceph(boto3_client):
     from mapgen.api.redirect import upload_mapfile_to_ceph
