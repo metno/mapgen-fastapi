@@ -164,6 +164,13 @@ def test_build_render_data():
                                    'layer_name': 'overview'}]
 
 
+def test_get_mapfile_template():
+    import jinja2
+    from mapgen.modules.satellite_thredds_module import get_mapfile_template
+    regexp_pattern_module = {'mapfile_template': 'does/not/exists'}
+    with pytest.raises(jinja2.exceptions.TemplateNotFound):
+        get_mapfile_template(regexp_pattern_module)
+
 @patch('boto3.client')
 def test_upload_mapfile_to_ceph(boto3_client):
     from mapgen.api.redirect import upload_mapfile_to_ceph
