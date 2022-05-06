@@ -82,7 +82,7 @@ async def get_mapserv(netcdf_path: str,
         pass
     except PermissionError:
         pass
-    map_file_name = os.path.join("mapfiles", netcdf_file_name + ".map")
+    map_file_name = os.path.join("/mapfiles", netcdf_file_name + ".map")
     if not os.path.exists(map_file_name):
         if regexp_pattern_module:
             try:
