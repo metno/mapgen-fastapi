@@ -15,20 +15,20 @@ ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
 
 # Install dependencies:
 COPY requirements.txt .
-RUN pip install -U pip
-RUN pip install -r requirements.txt
+RUN pip install -U pip \
+    && pip install -r requirements.txt \
+    && pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
 
 COPY ./start.sh /start.sh
-RUN chmod +x /start.sh
 
 COPY ./gunicorn_conf.py /gunicorn_conf.py
 
 COPY ./start-reload.sh /start-reload.sh
-RUN chmod +x /start-reload.sh
+RUN chmod +x /start.sh \
+    && chmod +x /start-reload.sh
 
-# COPY ./app /app
+COPY ./app /app
 #RUN git clone --branch upload-map-files-to-ceph https://github.com/metno/mapgen-fastapi.git
-RUN pip3 install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
 # ENV NCPLOTDIR /opt/ncplot/
 
 WORKDIR /app
