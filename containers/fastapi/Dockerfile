@@ -10,6 +10,8 @@ RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y apt-utils  b
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
+    MAPGEN_VERSION=issue_17_as_module
 
 # Install dependencies:
 COPY requirements.txt .
@@ -25,10 +27,11 @@ COPY ./start-reload.sh /start-reload.sh
 RUN chmod +x /start-reload.sh
 
 # COPY ./app /app
-RUN git clone --branch upload-map-files-to-ceph https://github.com/metno/mapgen-fastapi.git
+#RUN git clone --branch upload-map-files-to-ceph https://github.com/metno/mapgen-fastapi.git
+RUN pip3 install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
 # ENV NCPLOTDIR /opt/ncplot/
 
-WORKDIR /mapgen-fastapi
+WORKDIR /app
 
 ENV PYTHONPATH=/app
 
