@@ -25,7 +25,7 @@ COPY ./start-reload.sh /start-reload.sh
 RUN chmod +x /start-reload.sh
 
 # COPY ./app /app
-RUN git clone --branch upload-map-files-to-ceph git@github.com:metno/mapgen-fastapi.git
+RUN git clone --branch upload-map-files-to-ceph https://github.com/metno/mapgen-fastapi.git
 # ENV NCPLOTDIR /opt/ncplot/
 
 WORKDIR /mapgen-fastapi
