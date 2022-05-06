@@ -24,11 +24,11 @@ COPY ./gunicorn_conf.py /gunicorn_conf.py
 COPY ./start-reload.sh /start-reload.sh
 RUN chmod +x /start-reload.sh
 
-COPY ./app /app
-
+# COPY ./app /app
+RUN git clone --branch upload-map-files-to-ceph git@github.com:metno/mapgen-fastapi.git
 # ENV NCPLOTDIR /opt/ncplot/
 
-WORKDIR /
+WORKDIR /mapgen-fastapi
 
 ENV PYTHONPATH=/app
 
