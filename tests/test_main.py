@@ -56,13 +56,15 @@ def test_read_main_with_config_dict():
     assert response.text == ""
 
 path = "/api/get_mapserv/satellite-thredds/polar-swath/2022/04/27/"
+@patch('mapgen.api.redirect.get_mapfiles_path')
 @patch('boto3.client')
 @patch('mapgen.api.redirect.upload_mapfile_to_ceph')
 @pytest.mark.parametrize("netcdf_path", ["metopb-avhrr-20220427124247-20220427125242.nc", "metopc-avhrr-20220427115541-20220427120710.nc", "noaa19-avhrr-20220427121037-20220427121853.nc",
                                          "noaa20-viirs-mband-20220427113327-20220427114740.nc", "noaa20-viirs-iband-20220427113327-20220427114740.nc", "noaa20-viirs-dnb-20220427113327-20220427114740.nc",
                                          "npp-viirs-mband-20220427122315-20220427123728.nc", "npp-viirs-iband-20220427122315-20220427123728.nc", "npp-viirs-dnb-20220427122315-20220427123728.nc"])
-def test_get_netcdf(upload_patch, boto3_client, netcdf_path):
+def test_get_netcdf(upload_patch, boto3_client, mapfiles_path, netcdf_path):
     upload_patch.return_value = True
+    mapfiles_path.return_value = 'mapfiles'
     boto3_client().list_objects.return_value = {'Contents': [{'Key': '2022/04/27/overview_20220427_124247.tif'},
                                                              {'Key': '2022/04/27/overview_20220427_115541.tif'},
                                                              {'Key': '2022/04/27/overview_20220427_113327.tif'},

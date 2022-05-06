@@ -26,6 +26,9 @@ def upload_mapfile_to_ceph(map_file_name, bucket):
         return False
     return True   
 
+def get_mapfiles_path(regexp_pattern_module):
+    return regexp_pattern_module['mapfiles_path']
+
 # This handles a path in adition to the endpoint. This path can be to a netcdf file.
 @router.get("/api/get_mapserv/{netcdf_path:path}", response_class=RedirectResponse)
 async def get_mapserv(netcdf_path: str,
@@ -55,7 +58,8 @@ async def get_mapserv(netcdf_path: str,
                                                   'module': 'mapgen.modules.satellite_thredds_module',
                                                   'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
                                                   'map_file_bucket': 's-enda-mapfiles',
-                                                  'geotiff_bucket': 'geotiff-products-for-senda'},
+                                                  'geotiff_bucket': 'geotiff-products-for-senda',
+                                                  'mapfiles_path': '/mapfiles'},
                                                  {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
@@ -76,13 +80,14 @@ async def get_mapserv(netcdf_path: str,
         return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content={"message": "Could not match against any pattern. Check the config."})
 
     netcdf_file_name, _ = os.path.splitext(os.path.basename(netcdf_path))
+    mapfiles_path = get_mapfiles_path(regexp_pattern_module)
     try:
-        os.mkdir("mapfiles")
+        os.mkdir(mapfiles_path)
     except FileExistsError:
         pass
     except PermissionError:
         pass
-    map_file_name = os.path.join("/mapfiles", netcdf_file_name + ".map")
+    map_file_name = os.path.join(mapfiles_path, netcdf_file_name + ".map")
     if not os.path.exists(map_file_name):
         if regexp_pattern_module:
             try:
