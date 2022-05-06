@@ -39,7 +39,7 @@ MAP
     PROJECTION
       AUTO
     END
-    DATA {{layer.preview}}
+    DATA "{{layer.preview}}"
     METADATA
       "wms_title" "{{layer.layer_name}}"
       "wms_timeextent" "{{layer.preview_stamp}}/{{layer.preview_stamp}}"

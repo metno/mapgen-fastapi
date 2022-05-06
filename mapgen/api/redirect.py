@@ -9,7 +9,25 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request, Query, APIRouter, status
 from mapgen.worker import make_mapfile
 
+import boto3
+from botocore.exceptions import ClientError
+
 router = APIRouter()
+
+def upload_mapfile_to_ceph(map_file_name, bucket):
+    s3_client = boto3.client(service_name='s3',
+                             endpoint_url=os.environ['S3_ENDPOINT_URL'],
+                             aws_access_key_id=os.environ['S3_ACCESS_KEY'],
+                             aws_secret_access_key=os.environ['S3_SECRET_KEY'])
+    try:
+        s3_client.upload_file(map_file_name, bucket, os.path.basename(map_file_name))
+    except ClientError as e:
+        print("s3 upload map file failed with: ", str(e))
+        return False
+    return True   
+
+def get_mapfiles_path(regexp_pattern_module):
+    return regexp_pattern_module['mapfiles_path']
 
 # This handles a path in adition to the endpoint. This path can be to a netcdf file.
 @router.get("/api/get_mapserv/{netcdf_path:path}", response_class=RedirectResponse)
@@ -38,7 +56,10 @@ async def get_mapserv(netcdf_path: str,
     regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
                                                  {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
                                                   'module': 'mapgen.modules.satellite_thredds_module',
-                                                  'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map'},
+                                                  'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                                  'map_file_bucket': 's-enda-mapfiles',
+                                                  'geotiff_bucket': 'geotiff-products-for-senda',
+                                                  'mapfiles_path': '/mapfiles'},
                                                  {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
@@ -59,11 +80,14 @@ async def get_mapserv(netcdf_path: str,
         return JSONResponse(status_code=status.HTTP_501_NOT_IMPLEMENTED, content={"message": "Could not match against any pattern. Check the config."})
 
     netcdf_file_name, _ = os.path.splitext(os.path.basename(netcdf_path))
+    mapfiles_path = get_mapfiles_path(regexp_pattern_module)
     try:
-        os.mkdir("mapfiles")
+        os.mkdir(mapfiles_path)
     except FileExistsError:
         pass
-    map_file_name = os.path.join("mapfiles", netcdf_file_name + ".map")
+    except PermissionError:
+        pass
+    map_file_name = os.path.join(mapfiles_path, netcdf_file_name + ".map")
     if not os.path.exists(map_file_name):
         if regexp_pattern_module:
             try:
@@ -74,6 +98,9 @@ async def get_mapserv(netcdf_path: str,
             if loaded_module:
                 if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
                     return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find any quicklooks. No map file generated."})
+                else:
+                    if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['map_file_bucket']):
+                        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to upload map_file_name {map_file_name} to ceph."})
 
     mapfile_url = f"{request.url.scheme}://{request.url.netloc}/mapserver/{netcdf_path}?{request.url.query}"
     
