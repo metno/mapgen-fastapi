@@ -48,13 +48,16 @@ def build_render_data(regexp_pattern_module, start_time, previews):
         layers_render_data.append(layer_render_data)
     return layers_render_data
 
+def _get_mapfile_template(regexp_pattern_module):
+    return regexp_pattern_module['mapfile_template']
+
 def get_mapfile_template(regexp_pattern_module):
-    mapfile_template_dir = os.path.dirname(regexp_pattern_module['mapfile_template'])
+    mapfile_template_dir = os.path.dirname(_get_mapfile_template(regexp_pattern_module))
     if not os.path.exists(mapfile_template_dir):
         mapfile_template_dir = os.path.join('app', mapfile_template_dir)
     print(mapfile_template_dir)
     env = Environment(loader=FileSystemLoader(mapfile_template_dir))
-    return env.get_template(os.path.basename(regexp_pattern_module['mapfile_template']))
+    return env.get_template(os.path.basename(_get_mapfile_template(regexp_pattern_module)))
 
 def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
     print("Inside generate mapfile")
