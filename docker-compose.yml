@@ -3,6 +3,8 @@ version: '3.3'
 services:
   fastapi:
     image: registry.met.no/s-enda/data-visualization-services/container-fastapi:main
+    build:
+      context: ./containers/fastapi
     environment:
         DEBUG: 1
         PYTHONUNBUFFERED: 1
@@ -14,6 +16,8 @@ services:
       - mapfiles:/app/static/mapfiles
     ports:
       - 8080:80
+
+
 
   mapserver:
     image: registry.met.no/s-enda/container-mapserver:latest
