@@ -22,6 +22,7 @@ MAX_PROCESSING_SECOND = 600
 
 
 def configure_routing():
+    app.mount("/static", StaticFiles(directory="/app/static"), name="static")
     app.include_router(redirect.router)
     app.include_router(dashboard.router)
 
