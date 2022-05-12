@@ -1,5 +1,7 @@
-import importlib
+
 import os
+import yaml
+import importlib
 from unittest.mock import patch
 from xmlrpc.client import DateTime
 import pytest
@@ -27,6 +29,16 @@ def run_before_and_after_tests():
         for stamp in quicklooks_stamps:
             open(os.path.join('lustre/storeA/project/metproduction/products/satdata_polar/senda-bb/', quicklook_type + '_' + stamp), 'w').close()
 
+    config_file = [{'pattern': 'first', 'module': 'first_module'},
+                   {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                    'module': 'mapgen.modules.satellite_thredds_module',
+                    'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                    'map_file_bucket': 's-enda-mapfiles',
+                    'geotiff_bucket': 'geotiff-products-for-senda',
+                    'mapfiles_path': '/mapfiles'},
+                   {'pattern':'another', 'module': 'third_module'}]
+    with open('./data.yml', 'w') as outfile:
+        yaml.dump(config_file, outfile, default_flow_style=False)
     # Need some envs
     os.environ['S3_ACCESS_KEY'] = "test s3 access key"
     os.environ['S3_SECRET_KEY'] = "test s3 secret key"
@@ -39,6 +51,7 @@ def run_before_and_after_tests():
         shutil.rmtree('mapfiles')
     if os.path.exists('lustre'):
         shutil.rmtree('lustre')
+    os.remove('./data.yml')
 
 def test_read_main():
     response = client.get("/api/get_mapserv", allow_redirects=False)
@@ -57,16 +70,27 @@ def test_read_main_with_config_dict():
 
 path = "/api/get_mapserv/satellite-thredds/polar-swath/2022/04/27/"
 @patch('mapgen.modules.satellite_thredds_module._get_mapfile_template')
+@patch('mapgen.api.redirect.read_config_file')
 @patch('mapgen.api.redirect.get_mapfiles_path')
 @patch('boto3.client')
 @patch('mapgen.api.redirect.upload_mapfile_to_ceph')
 @pytest.mark.parametrize("netcdf_path", ["metopb-avhrr-20220427124247-20220427125242.nc", "metopc-avhrr-20220427115541-20220427120710.nc", "noaa19-avhrr-20220427121037-20220427121853.nc",
                                          "noaa20-viirs-mband-20220427113327-20220427114740.nc", "noaa20-viirs-iband-20220427113327-20220427114740.nc", "noaa20-viirs-dnb-20220427113327-20220427114740.nc",
                                          "npp-viirs-mband-20220427122315-20220427123728.nc", "npp-viirs-iband-20220427122315-20220427123728.nc", "npp-viirs-dnb-20220427122315-20220427123728.nc"])
-def test_get_netcdf(upload_patch, boto3_client, mapfiles_path, mapfile_template, netcdf_path):
+def test_get_netcdf(upload_patch, boto3_client, mapfiles_path, config_file, mapfile_template, netcdf_path):
     upload_patch.return_value = True
     mapfiles_path.return_value = 'mapfiles'
     mapfile_template.return_value = 'mapgen/templates/mapfiles/mapfile.map'
+    # regexp_config['url_paths_regexp_pattern']
+    config_file.return_value = [{'pattern': 'first', 'module': 'first_module'},
+                                {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                                 'module': 'mapgen.modules.satellite_thredds_module',
+                                 'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                 'map_file_bucket': 's-enda-mapfiles',
+                                 'geotiff_bucket': 'geotiff-products-for-senda',
+                                 'mapfiles_path': '/mapfiles'},
+                                {'pattern':'another', 'module': 'third_module'}]
+
     boto3_client().list_objects.return_value = {'Contents': [{'Key': '2022/04/27/overview_20220427_124247.tif'},
                                                              {'Key': '2022/04/27/overview_20220427_115541.tif'},
                                                              {'Key': '2022/04/27/overview_20220427_113327.tif'},
@@ -86,17 +110,35 @@ def test_get_netcdf_exception1(get_mapserv):
     assert response.status_code == 500
     assert response.json()['message'] == "Exception raised when regexp. Check the config."
 
-def test_get_netcdf_bad_pattern():
+@patch('mapgen.api.redirect.read_config_file')
+def test_get_netcdf_bad_pattern(config_file):
     netcdf_path = "bad-satellite-name-avhrr-20220427124247-20220427125242.nc"
+    config_file.return_value = [{'pattern': 'first', 'module': 'first_module'},
+                                {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                                 'module': 'mapgen.modules.satellite_thredds_module',
+                                 'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                 'map_file_bucket': 's-enda-mapfiles',
+                                 'geotiff_bucket': 'geotiff-products-for-senda',
+                                 'mapfiles_path': '/mapfiles'},
+                                {'pattern':'another', 'module': 'third_module'}]
     response = client.get(path + netcdf_path, allow_redirects=False)
     print(response.text)
     print(response.json()['message'])
     assert response.status_code == 501
     assert response.json()['message'] == "Could not match against any pattern. Check the config."
 
+@patch('mapgen.api.redirect.read_config_file')
 @patch('importlib.import_module', side_effect=ModuleNotFoundError)
-def test_fail_load_module(import_module):
+def test_fail_load_module(import_module, config_file):
     netcdf_path = "metopb-avhrr-20220427124247-20220427125242.nc"
+    config_file.return_value = [{'pattern': 'first', 'module': 'first_module'},
+                                {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                                 'module': 'mapgen.modules.satellite_thredds_module',
+                                 'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                 'map_file_bucket': 's-enda-mapfiles',
+                                 'geotiff_bucket': 'geotiff-products-for-senda',
+                                 'mapfiles_path': '/mapfiles'},
+                                {'pattern':'another', 'module': 'third_module'}]
     response = client.get(path + netcdf_path, allow_redirects=False)
     print(response.text)
     print(response.json()['message'])
@@ -204,3 +246,23 @@ def test_upload_mapfile_to_ceph_except(boto3_client):
     bucket = 'test bucket'
     ret = upload_mapfile_to_ceph(map_file_name, bucket)
     assert ret == False
+
+def test_read_config_file():
+    from mapgen.api.redirect import read_config_file
+
+    expected_config = [{'pattern': 'first', 'module': 'first_module'},
+                       {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                        'module': 'mapgen.modules.satellite_thredds_module',
+                        'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                        'map_file_bucket': 's-enda-mapfiles',
+                        'geotiff_bucket': 'geotiff-products-for-senda',
+                        'mapfiles_path': '/mapfiles'},
+                       {'pattern':'another', 'module': 'third_module'}]
+
+    assert read_config_file('./data.yml') == expected_config
+
+@patch('yaml.load')
+def test_read_config_file_exception(yaml_load):
+    from mapgen.api.redirect import read_config_file
+    yaml_load.side_effect = Exception("yaml load failed for some reason")
+    assert read_config_file('./data.yml') == None
