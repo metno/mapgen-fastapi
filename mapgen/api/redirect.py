@@ -1,6 +1,6 @@
 import os
 import re
-#import yaml
+import yaml
 import importlib
 from importlib.abc import Loader
 
@@ -29,6 +29,18 @@ def upload_mapfile_to_ceph(map_file_name, bucket):
 def get_mapfiles_path(regexp_pattern_module):
     return regexp_pattern_module['mapfiles_path']
 
+def read_config_file(regexp_config_file):
+    regexp_config = None
+    try:
+        if os.path.exists(regexp_config_file):
+            with open(regexp_config_file) as f:
+                regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
+    except Exception as e:
+        print(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
+        pass
+    return regexp_config
+
+
 # This handles a path in adition to the endpoint. This path can be to a netcdf file.
 @router.get("/api/get_mapserv/{netcdf_path:path}", response_class=RedirectResponse)
 async def get_mapserv(netcdf_path: str,
@@ -49,22 +61,19 @@ async def get_mapserv(netcdf_path: str,
     print("CURRENT DIR", os.getcwd())
     default_regexp_config_file = '/config/url-path-regexp-patterns.yaml'
     regexp_config_file = default_regexp_config_file
-    #if os.path.exists(regexp_config_file):
-    #    with open(regexp_config_file) as f:
-    #        regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
-    regexp_config = {}
-    regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
-                                                 {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
-                                                  'module': 'mapgen.modules.satellite_thredds_module',
-                                                  #'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
-                                                  'mapfile_template': '/mapfile-templates/mapfile.map',
-                                                  'map_file_bucket': 's-enda-mapfiles',
-                                                  'geotiff_bucket': 'geotiff-products-for-senda',
-                                                  'mapfiles_path': '/mapfiles'},
-                                                 {'pattern':'another', 'module': 'third_module'}]
+    regexp_config = read_config_file(regexp_config_file)
+    # regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
+    #                                              {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+    #                                               'module': 'mapgen.modules.satellite_thredds_module',
+    #                                               #'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+    #                                               'mapfile_template': '/mapfile-templates/mapfile.map',
+    #                                               'map_file_bucket': 's-enda-mapfiles',
+    #                                               'geotiff_bucket': 'geotiff-products-for-senda',
+    #                                               'mapfiles_path': '/mapfiles'},
+    #                                              {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
-        for url_path_regexp_pattern in regexp_config['url_paths_regexp_pattern']:
+        for url_path_regexp_pattern in regexp_config:
             print(url_path_regexp_pattern)
             pattern = re.compile(url_path_regexp_pattern['pattern'])
             if pattern.match(netcdf_path):
