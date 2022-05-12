@@ -11,7 +11,7 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
-    MAPGEN_VERSION=issue_17_as_module
+    MAPGEN_VERSION=main
 
 # Install dependencies:
 COPY requirements.txt .
