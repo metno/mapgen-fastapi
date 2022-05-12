@@ -261,8 +261,8 @@ def test_read_config_file():
 
     assert read_config_file('./data.yml') == expected_config
 
-@patch('yaml.load', side_effect=Exception("yaml failed for some reason"))
+@patch('yaml.load')
 def test_read_config_file_exception(yaml_load):
     from mapgen.api.redirect import read_config_file
-
-    assert read_config_file('./data.yaml') == None
+    yaml_load.side_effect = Exception("yaml load failed for some reason")
+    assert read_config_file('./data.yml') == None
