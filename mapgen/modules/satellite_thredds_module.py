@@ -1,3 +1,22 @@
+"""
+satellite thredds module : module
+====================
+
+Copyright 2022 MET Norway
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import os
 import re
 import boto3
@@ -59,7 +78,7 @@ def get_mapfile_template(regexp_pattern_module):
     env = Environment(loader=FileSystemLoader(mapfile_template_dir))
     return env.get_template(os.path.basename(_get_mapfile_template(regexp_pattern_module)))
 
-def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
+def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name, mapserver_url):
     print("Inside generate mapfile")
     mt = get_mapfile_template(regexp_pattern_module)
 
@@ -74,7 +93,7 @@ def generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_f
     redered_map_template = mt.render(layers=layers_render_data,
                                      map_file_name=map_file_name,
                                      netcdf_path=netcdf_path,
-                                     mapserver_url='fastapi-dev.s-enda.k8s.met.no/mapserver')
+                                     mapserver_url=f'{mapserver_url}/mapserver')
     print(redered_map_template)
 
     with open(map_file_name, "w") as map_file:
