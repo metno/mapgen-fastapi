@@ -1,3 +1,22 @@
+"""
+fastapi : endpoint
+====================
+
+Copyright 2022 MET Norway
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import os
 import re
 import yaml
@@ -48,29 +67,9 @@ async def get_mapserv(netcdf_path: str,
                       config_dict: str = Query(None, 
                                                title='Mapfile', 
                                                description='Data to fill in a mapfile template')):
-    print("1",netcdf_path)
-    print("URL", request.url)
-    print("Hostname:", request.url.hostname)
-    print("is_secure", request.url.is_secure)
-    print("scheme", request.url.scheme)
-    print("query", request.url.query)
-    print("netloc", request.url.netloc)
-    print("METHOD", request.method)
-    print("PATH PARAMS", request.path_params)
-    print("CONFIG_DICT", config_dict)
-    print("CURRENT DIR", os.getcwd())
     default_regexp_config_file = '/config/url-path-regexp-patterns.yaml'
     regexp_config_file = default_regexp_config_file
     regexp_config = read_config_file(regexp_config_file)
-    # regexp_config['url_paths_regexp_pattern'] = [{'pattern': 'first', 'module': 'first_module'},
-    #                                              {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
-    #                                               'module': 'mapgen.modules.satellite_thredds_module',
-    #                                               #'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
-    #                                               'mapfile_template': '/mapfile-templates/mapfile.map',
-    #                                               'map_file_bucket': 's-enda-mapfiles',
-    #                                               'geotiff_bucket': 'geotiff-products-for-senda',
-    #                                               'mapfiles_path': '/mapfiles'},
-    #                                              {'pattern':'another', 'module': 'third_module'}]
     regexp_pattern_module = None
     try:
         for url_path_regexp_pattern in regexp_config:
@@ -81,9 +80,10 @@ async def get_mapserv(netcdf_path: str,
                 regexp_pattern_module = url_path_regexp_pattern
                 break
             else:
-                print("No match")
-    except Exception:
-        print("Something failed")
+                print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                print("Please review your config if you expect this path to be handled.")
+    except Exception as e:
+        print(f"Exception in the netcdf_path match part with {str(e)}")
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Exception raised when regexp. Check the config."})
 
     if not regexp_pattern_module:
@@ -122,10 +122,6 @@ async def get_mapserv(request: Request,
                            config_dict: str = Query(None, 
                                            title='Mapfile', 
                                            description='Data to fill in a mapfile template')):
-    print("2", request.method)
-    print(request.query_params)
-    print(request.path_params)
-    print(config_dict)
     if config_dict:
         # redirect to given or generated link 
         mapfile_url = make_mapfile(config_dict)
