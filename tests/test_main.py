@@ -145,15 +145,24 @@ def test_fail_load_module(import_module, config_file):
     assert response.status_code == 500
     assert response.json()['message'] == "Failed to load module mapgen.modules.satellite_thredds_module"
 
-# @patch('getattr', side_effect=False)
-# def test_fail_call_module(call_module):
-#     """This is not working yet but only covers one line of code"""
-#     netcdf_path = "metopb-avhrr-20220427124247-20220427125242.nc"
-#     response = client.get(path + netcdf_path, allow_redirects=False)
-#     print(response.text)
-#     print(response.json()['message'])
-#     assert response.status_code == 500
-#     assert response.json()['message'] == "Failed to load module mapgen.modules.satellite_thredds_module"
+@patch('mapgen.api.redirect.read_config_file')
+@patch('mapgen.modules.satellite_thredds_module.generate_mapfile')
+def test_fail_call_module(call_module, config_file):
+    netcdf_path = "metopb-avhrr-20220427124247-20220427125242.nc"
+    config_file.return_value = [{'pattern': 'first', 'module': 'first_module'},
+                                {'pattern': r'^satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp)-(avhrr|viirs-mband|viirs-iband|viirs-dnb)-(\d{14})-(\d{14})\.nc$',
+                                 'module': 'mapgen.modules.satellite_thredds_module',
+                                 'mapfile_template': 'mapgen/templates/mapfiles/mapfile.map',
+                                 'map_file_bucket': 's-enda-mapfiles',
+                                 'geotiff_bucket': 'geotiff-products-for-senda',
+                                 'mapfiles_path': '/mapfiles'},
+                                {'pattern':'another', 'module': 'third_module'}]
+    call_module.return_value = False
+    response = client.get(path + netcdf_path, allow_redirects=False)
+    print(response.text)
+    print(response.json()['message'])
+    assert response.status_code == 500
+    assert response.json()['message'] == "Could not find any quicklooks. No map file generated."
 
 def test_get_dashboard():
     """This is not finished"""
