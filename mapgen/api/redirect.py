@@ -106,7 +106,7 @@ async def get_mapserv(netcdf_path: str,
                 print("Failed to load module:", regexp_pattern_module['module'], str(e))
                 return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": f"Failed to load module {regexp_pattern_module['module']}"})
             if loaded_module:
-                if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name):
+                if not getattr(loaded_module, 'generate_mapfile')(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name, request.url.netloc):
                     return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"message": "Could not find any quicklooks. No map file generated."})
                 else:
                     if not upload_mapfile_to_ceph(map_file_name, regexp_pattern_module['map_file_bucket']):

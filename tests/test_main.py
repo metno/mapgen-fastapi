@@ -225,7 +225,8 @@ def test_generate_mapfile_found_no_prefix(get_previews):
     netcdf_path = 'also-dummy'
     netcdf_file_name = 'metopb-avhrr-20220427124247-20220427125242.nc'
     map_file_name = 'dummy'
-    ret = generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name)
+    mapserver_url = 'url.to.mapserver'
+    ret = generate_mapfile(regexp_pattern_module, netcdf_path, netcdf_file_name, map_file_name, mapserver_url)
     assert ret == False
 
 @patch('boto3.client')
