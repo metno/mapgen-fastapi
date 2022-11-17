@@ -25,7 +25,7 @@ from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi import Request, APIRouter, Query
 from satpy import Scene
 import mapscript
-import math
+from glob import glob
 from datetime import datetime
 import xml.dom.minidom
 
@@ -60,8 +60,10 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     print(f'{netcdf_path}')
     print(satpy_products)
-    start_time = _parse_filename(netcdf_path)
-    print(start_time)
+    (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path)
+    start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
+    similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time)
+    print("Similar netcdf paths:", similar_netcdf_paths)
     ms_satpy_products = _get_satpy_products(satpy_products, full_request)
     print("satpy product/layer", ms_satpy_products)
 
@@ -70,7 +72,8 @@ async def generate_satpy_quicklook(netcdf_path: str,
         satpy_product_filename = f'{satpy_product}-{start_time:%Y%m%d%H%M%S}.tif'
         satpy_products_to_generate.append({'satpy_product': satpy_product, 'satpy_product_filename': satpy_product_filename} )
     
-    _generate_satpy_geotiff(netcdf_path, satpy_products_to_generate)
+    
+    _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate)
  
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(netcdf_path, map_object)
@@ -96,7 +99,6 @@ async def generate_satpy_quicklook(netcdf_path: str,
         ows_req.setParameter("VERSION", "1.3.0")
         ows_req.setParameter("REQUEST", "GetCapabilities")
     else:
-        print(type(full_request.query_params))
         print("ALL query params: ", str(full_request.query_params))
     print("NumParams", ows_req.NumParams)
     print("TYPE", ows_req.type)
@@ -152,7 +154,7 @@ def _fill_metadata_to_mapfile(netcdf_path, map_object):
     map_object.setSize(10000, 10000)
     map_object.units = mapscript.MS_DD
 
-def _generate_satpy_geotiff(netcdf_path, satpy_products_to_generate):
+def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
@@ -163,10 +165,10 @@ def _generate_satpy_geotiff(netcdf_path, satpy_products_to_generate):
         return
     print("Need to generate: ", satpy_products)
     print(datetime.now(), "Before Scene")
-    swath_scene = Scene(filenames=[netcdf_path], reader='satpy_cf_nc')
+    swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
     print(datetime.now(), "Before load")
     swath_scene.load(satpy_products)
-    print(swath_scene.available_composite_names())
+    print("Available composites names:", swath_scene.available_composite_names())
     proj_dict = {'proj': 'omerc',
                  'ellps': 'WGS84'}
 
@@ -187,14 +189,19 @@ def _generate_satpy_geotiff(netcdf_path, satpy_products_to_generate):
 
 def _parse_filename(netcdf_path):
     """Parse the netcdf to return start_time."""
-    pattern_match = '^.*satellite-thredds/polar-swath/(\d{4})/(\d{2})/(\d{2})/(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp|aqua|terra|fy3d)-(avhrr|viirs-mband|modis-1km|mersi2-1k)-(\d{14})-(\d{14})\.nc$'
+    pattern_match = '^(.*satellite-thredds/polar-swath/\d{4}/\d{2}/\d{2}/)(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp|aqua|terra|fy3d)-(avhrr|viirs-mband|viirs-dnb|modis-1km|mersi2-1k)-(\d{14})-(\d{14})\.nc$'
     pattern = re.compile(pattern_match)
     mtchs = pattern.match(netcdf_path)
-    start_time = None
+    # start_time = None
     if mtchs:
-        print("Pattern match:", mtchs.groups()[5])
-        start_time = datetime.strptime(mtchs.groups()[5], "%Y%m%d%H%M%S")
-    return start_time
+        print("Pattern match:", mtchs.groups())
+        # start_time = datetime.strptime(mtchs.groups()[5], "%Y%m%d%H%M%S")
+        return mtchs.groups()
+    return None
+
+def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time):
+    similar_netcdf_paths = glob(f'{path}{platform_name}-*-{start_time}-{end_time}.nc')
+    return similar_netcdf_paths
 
 @router.get("/{image_path:path}")
 async def main(image_path: str):
