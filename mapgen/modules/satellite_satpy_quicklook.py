@@ -154,7 +154,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
 
 def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
-    dataset = rasterio.open(satpy_product_filename)
+    dataset = rasterio.open(f's3://{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}')
     bounds = dataset.bounds
     ll_x = bounds[0]
     ll_y = bounds[1]
