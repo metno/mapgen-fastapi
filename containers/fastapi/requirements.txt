@@ -19,4 +19,5 @@ bokeh==2.3.3
 xarray
 boto3
 satpy
+rasterio
 mapscript
