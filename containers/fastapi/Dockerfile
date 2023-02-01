@@ -40,7 +40,7 @@ COPY ./app /app
 
 WORKDIR /app
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/lib/python3/dist-packages/
 
 EXPOSE 80
 
