@@ -5,7 +5,7 @@ LABEL maintainer="massimods@met.no"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y apt-utils  build-essential git python3-dev python3.8-venv
+RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y apt-utils build-essential git python3-dev python3-venv
 
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
