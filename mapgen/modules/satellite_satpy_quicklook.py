@@ -19,10 +19,14 @@ limitations under the License.
 
 import os
 import re
+import sys
+import boto3
+import botocore
 import rasterio
+import traceback
 from fastapi.responses import HTMLResponse, FileResponse, Response
 # from fastapi import Request, Query, APIRouter, status
-from fastapi import Request, APIRouter, Query
+from fastapi import Request, APIRouter, Query, HTTPException
 from satpy import Scene
 import mapscript
 from glob import glob
@@ -35,6 +39,7 @@ def _get_satpy_products(satpy_products, full_request):
     """Get the product list to handle."""
     # Default
     ms_satpy_products = ['overview']
+    # ms_satpy_products = ['night_overview']
     if satpy_products:
         ms_satpy_products = satpy_products
     else:
@@ -59,6 +64,8 @@ async def generate_satpy_quicklook(netcdf_path: str,
                                    satpy_products: list = Query(default=[])):
     
     print(f'{netcdf_path}')
+    if not netcdf_path:
+        raise HTTPException(status_code=404, detail="Missing netcdf path")
     print(satpy_products)
     (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path)
     start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
@@ -67,21 +74,44 @@ async def generate_satpy_quicklook(netcdf_path: str,
     ms_satpy_products = _get_satpy_products(satpy_products, full_request)
     print("satpy product/layer", ms_satpy_products)
 
+    bucket = 'geotiff-products-for-senda'
+    if 'iband' in netcdf_path:
+        bucket = 'geotiff-products-for-senda-iband'
+    elif 'dnb' in netcdf_path:
+        bucket = 'geotiff-products-for-senda-dnb'
+    elif 'modis-qkm' in netcdf_path:
+        bucket = 'geotiff-products-for-senda-modis-qkm'
+    elif 'modis-hkm' in netcdf_path:
+        bucket = 'geotiff-products-for-senda-modis-hkm'
+    elif 'mersi2-qk' in netcdf_path:
+        bucket = 'geotiff-products-for-senda-mersi2-qk'
+
     satpy_products_to_generate = []
     for satpy_product in ms_satpy_products:
+
         satpy_product_filename = f'{satpy_product}-{start_time:%Y%m%d%H%M%S}.tif'
-        satpy_products_to_generate.append({'satpy_product': satpy_product, 'satpy_product_filename': satpy_product_filename} )
+        satpy_products_to_generate.append({'satpy_product': satpy_product,
+                                           'satpy_product_filename': satpy_product_filename,
+                                           'bucket': bucket})
     
     
-    _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate)
- 
+    try:
+        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time):
+            raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
+    except KeyError as ke:
+        if 'Unknown datasets' in str(ke):
+            raise HTTPException(status_code=500, detail=f"Layer can not be made for this dataset {str(ke)}")
+
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(netcdf_path, map_object)
 
     for satpy_product in satpy_products_to_generate:
         layer = mapscript.layerObj()
-        _generate_layer(start_time, satpy_product['satpy_product'],
-                        satpy_product['satpy_product_filename'], layer)
+        _generate_layer(start_time,
+                        satpy_product['satpy_product'],
+                        satpy_product['satpy_product_filename'],
+                        satpy_product['bucket'],
+                        layer)
         layer_no = map_object.insertLayer(layer)
     map_object.save(f'satpy-products-{start_time:%Y%m%d%H%M%S}.map')
 
@@ -122,7 +152,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
         result = dom.toprettyxml(indent="", newl="")
     return Response(result, media_type=content_type)
 
-def _generate_layer(start_time, satpy_product, satpy_product_filename, layer):
+def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
     dataset = rasterio.open(satpy_product_filename)
     bounds = dataset.bounds
@@ -133,14 +163,13 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, layer):
 
     layer.setProjection(dataset.crs.to_proj4())
     layer.status = 1
-    layer.data = satpy_product_filename
+    layer.data = f'/vsis3/{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}'
     layer.type = mapscript.MS_LAYER_RASTER
     layer.name = satpy_product
     layer.metadata.set("wms_title", satpy_product)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_timeextent", f'{start_time:%Y-%m-%dT%H:%M:%S}Z/{start_time:%Y-%m-%dT%H:%M:%S}Z')
     layer.metadata.set("wms_default", f'{start_time:%Y-%m-%dT%H:%M:%S}Z')
-
     dataset.close()
 
 def _fill_metadata_to_mapfile(netcdf_path, map_object):
@@ -149,20 +178,68 @@ def _fill_metadata_to_mapfile(netcdf_path, map_object):
     map_object.web.metadata.set("wms_onlineresource", f"http://localhost:9000/api/get_quicklook/{netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857")
     map_object.web.metadata.set("wms_enable_request", "*")
-
     map_object.setProjection("AUTO")
     map_object.setSize(10000, 10000)
     map_object.units = mapscript.MS_DD
+    map_object.setExtent(-90, 20, 90, 90)
 
-def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate):
+def _generate_key(start_time, satpy_product_filename):
+    return os.path.join(f'{start_time:%Y/%m/%d}', os.path.basename(satpy_product_filename))
+
+def _upload_geotiff_to_ceph(filenames, start_time):
+
+    print("Upload:", str(filenames))
+    s3_client = boto3.client(service_name='s3',
+                             endpoint_url=os.environ['S3_ENDPOINT_URL'],
+                             aws_access_key_id=os.environ['S3_ACCESS_KEY'],
+                             aws_secret_access_key=os.environ['S3_SECRET_KEY'])
+    print("After client")
+    try:
+        for f in filenames:
+            print(f"uploading {f['satpy_product_filename']}")
+            key = _generate_key(start_time, f['satpy_product_filename'])
+            s3_client.upload_file(f['satpy_product_filename'], f['bucket'], key)
+            s3_client.put_object_acl(Bucket=f['bucket'], Key=key, ACL='public-read')
+    except Exception as e:
+        print("Failed to upload file to s3", str(e))
+        exc_info = sys.exc_info()
+        traceback.print_exception(*exc_info)
+        raise HTTPException(status_code=500, detail="Failed to upload file to s3.")
+    print("Done uploading")
+    return True
+
+def _exists_on_ceph(satpy_product, start_time):
+    exists = False
+    s3 = boto3.resource('s3',
+                        endpoint_url=os.environ['S3_ENDPOINT_URL'],
+                        aws_access_key_id=os.environ['S3_ACCESS_KEY'],
+                        aws_secret_access_key=os.environ['S3_SECRET_KEY'])
+
+    try:
+        key = _generate_key(start_time, satpy_product['satpy_product_filename'])
+        s3.Object(satpy_product['bucket'], key).load()
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            exists = False
+        else:
+            # Something else has gone wrong.
+            exists = False
+            raise
+    else:
+        # The object does exist.
+        print("Already on object store")
+        exists = True
+    return exists
+
+def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
-        if not os.path.exists(_satpy_product['satpy_product_filename']):
+        if not _exists_on_ceph(_satpy_product, start_time) and not os.path.exists(_satpy_product['satpy_product_filename']):
             satpy_products.append(_satpy_product['satpy_product'])
     if not satpy_products:
         print("No products needs to be generated.")
-        return
+        return True
     print("Need to generate: ", satpy_products)
     print(datetime.now(), "Before Scene")
     swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
@@ -173,7 +250,7 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate):
                  'ellps': 'WGS84'}
 
     print(datetime.now(), "Before compute optimal bb area")
-    # bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict, resolution=7500)
+    #bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict, resolution=7500)
     bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict)
     print(bb_area)
     print(bb_area.pixel_size_x)
@@ -182,10 +259,16 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate):
     print(datetime.now(), "Before resample")
     resample_scene = swath_scene.resample(bb_area)
     print(datetime.now(), "Before save")
+    products_to_upload_to_ceph = []
     for _satpy_product in satpy_products_to_generate:
         if _satpy_product['satpy_product'] in satpy_products:
             resample_scene.save_dataset(_satpy_product['satpy_product'], filename=_satpy_product['satpy_product_filename'])
-    print(datetime.now(), "After save")
+            if os.path.exists(_satpy_product['satpy_product_filename']):
+                products_to_upload_to_ceph.append(_satpy_product)
+    print(datetime.now(), "After save", str(products_to_upload_to_ceph))
+    if not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time):
+        return False
+    return True
 
 def _parse_filename(netcdf_path):
     """Parse the netcdf to return start_time."""
@@ -197,6 +280,9 @@ def _parse_filename(netcdf_path):
         print("Pattern match:", mtchs.groups())
         # start_time = datetime.strptime(mtchs.groups()[5], "%Y%m%d%H%M%S")
         return mtchs.groups()
+    else:
+        print("No match: ", netcdf_path)
+        raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}")
     return None
 
 def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time):
