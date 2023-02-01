@@ -20,4 +20,3 @@ xarray
 boto3
 satpy
 rasterio
-mapscript
