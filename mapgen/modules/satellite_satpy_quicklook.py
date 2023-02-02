@@ -292,4 +292,6 @@ def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time):
 @router.get("/{image_path:path}")
 async def main(image_path: str):
     """Need this to local images"""
+    print("image path:", image_path)
+    print("CWD: ", os.getcwd())
     return FileResponse(image_path)
