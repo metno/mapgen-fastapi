@@ -20,6 +20,7 @@ limitations under the License.
 import os
 import re
 import sys
+import yaml
 import boto3
 import botocore
 import rasterio
@@ -58,6 +59,51 @@ def _get_satpy_products(satpy_products, full_request):
                         pass
     return ms_satpy_products
 
+def _get_mapfiles_path(regexp_pattern_module):
+    return regexp_pattern_module['mapfiles_path']
+
+def _read_config_file(regexp_config_file):
+    regexp_config = None
+    try:
+        if os.path.exists(regexp_config_file):
+            with open(regexp_config_file) as f:
+                regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
+    except Exception as e:
+        print(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
+        pass
+    return regexp_config
+
+def _parse_config(netcdf_path):
+    default_regexp_config_file = '/config/url-path-regexp-patterns.yaml'
+    regexp_config_file = default_regexp_config_file
+    regexp_config = _read_config_file(regexp_config_file)
+    if regexp_config:
+        regexp_pattern_module = None
+        try:
+            for url_path_regexp_pattern in regexp_config:
+                print(url_path_regexp_pattern)
+                pattern = re.compile(url_path_regexp_pattern['pattern'])
+                if pattern.match(netcdf_path):
+                    print("Got match. Need to load module:", url_path_regexp_pattern['module'])
+                    regexp_pattern_module = url_path_regexp_pattern
+                    break
+                else:
+                    print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                    print("Please review your config if you expect this path to be handled.")
+            
+        except Exception as e:
+            print(f"Exception in the netcdf_path match part with {str(e)}")
+            exc_info = sys.exc_info()
+            traceback.print_exception(*exc_info)
+            raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
+    else:
+        regexp_pattern_module = {'mapfiles_path': '.',
+                                 'geotiff_tmp': '.'}
+    if not regexp_pattern_module:
+        raise HTTPException(status_code=501, detail=f"Could not match against any pattern. Check the config.")
+
+    return regexp_pattern_module
+
 @router.get("/api/get_quicklook/{netcdf_path:path}", response_class=Response)
 async def generate_satpy_quicklook(netcdf_path: str,
                                    full_request: Request,
@@ -67,6 +113,8 @@ async def generate_satpy_quicklook(netcdf_path: str,
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     print(satpy_products)
+    product_config = _parse_config(netcdf_path)
+    
     (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path)
     start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
     similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time)
@@ -96,7 +144,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     
     try:
-        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time):
+        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config):
             raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
@@ -113,7 +161,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
                         satpy_product['bucket'],
                         layer)
         layer_no = map_object.insertLayer(layer)
-    map_object.save(f'satpy-products-{start_time:%Y%m%d%H%M%S}.map')
+    map_object.save(os.path.join(_get_mapfiles_path(product_config), f'satpy-products-{start_time:%Y%m%d%H%M%S}.map'))
 
     ows_req = mapscript.OWSRequest()
     ows_req.type = mapscript.MS_GET_REQUEST
@@ -154,7 +202,12 @@ async def generate_satpy_quicklook(netcdf_path: str,
 
 def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
-    dataset = rasterio.open(f's3://{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}')
+    try:
+        dataset = rasterio.open(f's3://{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}')
+    except rasterio.errors.RasterioIOError:
+        exc_info = sys.exc_info()
+        traceback.print_exception(*exc_info)
+        return None
     bounds = dataset.bounds
     ll_x = bounds[0]
     ll_y = bounds[1]
@@ -186,7 +239,7 @@ def _fill_metadata_to_mapfile(netcdf_path, map_object):
 def _generate_key(start_time, satpy_product_filename):
     return os.path.join(f'{start_time:%Y/%m/%d}', os.path.basename(satpy_product_filename))
 
-def _upload_geotiff_to_ceph(filenames, start_time):
+def _upload_geotiff_to_ceph(filenames, start_time, product_config):
 
     print("Upload:", str(filenames))
     s3_client = boto3.client(service_name='s3',
@@ -196,9 +249,9 @@ def _upload_geotiff_to_ceph(filenames, start_time):
     print("After client")
     try:
         for f in filenames:
-            print(f"uploading {f['satpy_product_filename']}")
+            print(f"uploading {os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename'])}")
             key = _generate_key(start_time, f['satpy_product_filename'])
-            s3_client.upload_file(f['satpy_product_filename'], f['bucket'], key)
+            s3_client.upload_file(os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename']), f['bucket'], key)
             s3_client.put_object_acl(Bucket=f['bucket'], Key=key, ACL='public-read')
     except Exception as e:
         print("Failed to upload file to s3", str(e))
@@ -231,11 +284,11 @@ def _exists_on_ceph(satpy_product, start_time):
         exists = True
     return exists
 
-def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time):
+def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
-        if not _exists_on_ceph(_satpy_product, start_time) and not os.path.exists(_satpy_product['satpy_product_filename']):
+        if not _exists_on_ceph(_satpy_product, start_time) and not os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
             satpy_products.append(_satpy_product['satpy_product'])
     if not satpy_products:
         print("No products needs to be generated.")
@@ -262,11 +315,11 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     products_to_upload_to_ceph = []
     for _satpy_product in satpy_products_to_generate:
         if _satpy_product['satpy_product'] in satpy_products:
-            resample_scene.save_dataset(_satpy_product['satpy_product'], filename=_satpy_product['satpy_product_filename'])
-            if os.path.exists(_satpy_product['satpy_product_filename']):
+            resample_scene.save_dataset(_satpy_product['satpy_product'], filename=os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename']))
+            if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
                 products_to_upload_to_ceph.append(_satpy_product)
     print(datetime.now(), "After save", str(products_to_upload_to_ceph))
-    if not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time):
+    if not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time, product_config):
         return False
     return True
 
