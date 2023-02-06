@@ -36,11 +36,10 @@ import xml.dom.minidom
 
 router = APIRouter()
 
-def _get_satpy_products(satpy_products, full_request):
+def _get_satpy_products(satpy_products, full_request, default_dataset):
     """Get the product list to handle."""
     # Default
-    ms_satpy_products = ['overview']
-    # ms_satpy_products = ['night_overview']
+    ms_satpy_products = [default_dataset]
     if satpy_products:
         ms_satpy_products = satpy_products
     else:
@@ -74,11 +73,16 @@ def _read_config_file(regexp_config_file):
     return regexp_config
 
 def _parse_config(netcdf_path):
-    default_regexp_config_file = '/config/url-path-regexp-patterns.yaml'
-    regexp_config_file = default_regexp_config_file
+    default_regexp_config_filename = 'url-path-regexp-patterns.yaml'
+    default_regexp_config_dir = '/config'
+    if os.path.exists(os.path.join('./', default_regexp_config_filename)):
+        regexp_config_file = os.path.join('./', default_regexp_config_filename)
+    else:
+        regexp_config_file = os.path.join(default_regexp_config_dir,
+                                          default_regexp_config_filename)
     regexp_config = _read_config_file(regexp_config_file)
+    regexp_pattern_module = None
     if regexp_config:
-        regexp_pattern_module = None
         try:
             for url_path_regexp_pattern in regexp_config:
                 print(url_path_regexp_pattern)
@@ -96,9 +100,6 @@ def _parse_config(netcdf_path):
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
             raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
-    else:
-        regexp_pattern_module = {'mapfiles_path': '.',
-                                 'geotiff_tmp': '.'}
     if not regexp_pattern_module:
         raise HTTPException(status_code=501, detail=f"Could not match against any pattern. Check the config.")
 
@@ -116,25 +117,20 @@ async def generate_satpy_quicklook(netcdf_path: str,
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     print(satpy_products)
     product_config = _parse_config(netcdf_path)
-    
-    (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path)
-    start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
-    similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time)
-    print("Similar netcdf paths:", similar_netcdf_paths)
-    ms_satpy_products = _get_satpy_products(satpy_products, full_request)
-    print("satpy product/layer", ms_satpy_products)
 
-    bucket = 'geotiff-products-for-senda'
-    if 'iband' in netcdf_path:
-        bucket = 'geotiff-products-for-senda-iband'
-    elif 'dnb' in netcdf_path:
-        bucket = 'geotiff-products-for-senda-dnb'
-    elif 'modis-qkm' in netcdf_path:
-        bucket = 'geotiff-products-for-senda-modis-qkm'
-    elif 'modis-hkm' in netcdf_path:
-        bucket = 'geotiff-products-for-senda-modis-hkm'
-    elif 'mersi2-qk' in netcdf_path:
-        bucket = 'geotiff-products-for-senda-mersi2-qk'
+    resolution = None
+    bucket = product_config['geotiff_bucket']
+    if 'mersi2-qk' in netcdf_path:
+        resolution = 250
+    elif 'mersi2-1k' in netcdf_path:
+        resolution = 1000
+    
+    (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path, product_config)
+    start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
+    similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time, netcdf_path)
+    print("Similar netcdf paths:", similar_netcdf_paths)
+    ms_satpy_products = _get_satpy_products(satpy_products, full_request, product_config['default_dataset'])
+    print("satpy product/layer", ms_satpy_products)
 
     satpy_products_to_generate = []
     for satpy_product in ms_satpy_products:
@@ -146,7 +142,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     
     try:
-        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config):
+        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
             raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
@@ -255,6 +251,7 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
             key = _generate_key(start_time, f['satpy_product_filename'])
             s3_client.upload_file(os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename']), f['bucket'], key)
             s3_client.put_object_acl(Bucket=f['bucket'], Key=key, ACL='public-read')
+            os.remove(os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename']))
     except Exception as e:
         print("Failed to upload file to s3", str(e))
         exc_info = sys.exc_info()
@@ -286,7 +283,7 @@ def _exists_on_ceph(satpy_product, start_time):
         exists = True
     return exists
 
-def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config):
+def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
@@ -299,7 +296,7 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     print(datetime.now(), "Before Scene")
     swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
     print(datetime.now(), "Before load")
-    swath_scene.load(satpy_products)
+    swath_scene.load(satpy_products, resolution=resolution)
     print("Available composites names:", swath_scene.available_composite_names())
     proj_dict = {'proj': 'omerc',
                  'ellps': 'WGS84'}
@@ -325,9 +322,10 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
         return False
     return True
 
-def _parse_filename(netcdf_path):
+def _parse_filename(netcdf_path, product_config):
     """Parse the netcdf to return start_time."""
     pattern_match = '^(.*satellite-thredds/polar-swath/\d{4}/\d{2}/\d{2}/)(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp|aqua|terra|fy3d)-(avhrr|viirs-mband|viirs-dnb|modis-1km|mersi2-1k)-(\d{14})-(\d{14})\.nc$'
+    pattern_match = product_config['pattern']
     pattern = re.compile(pattern_match)
     mtchs = pattern.match(netcdf_path)
     # start_time = None
@@ -340,8 +338,11 @@ def _parse_filename(netcdf_path):
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}")
     return None
 
-def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time):
-    similar_netcdf_paths = glob(f'{path}{platform_name}-*-{start_time}-{end_time}.nc')
+def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
+    if 'fy3d' in platform_name or 'aqua' in platform_name or 'terra' in platform_name:
+        similar_netcdf_paths = [netcdf_path]
+    else:
+        similar_netcdf_paths = glob(f'{path}{platform_name}-*-{start_time}-{end_time}.nc')
     return similar_netcdf_paths
 
 @router.get("/{image_path:path}")
