@@ -201,7 +201,9 @@ async def generate_satpy_quicklook(netcdf_path: str,
 def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
     try:
+        print("Rasterio open")
         dataset = rasterio.open(f's3://{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}')
+        print("Rasterio opened")
     except rasterio.errors.RasterioIOError:
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
@@ -222,6 +224,7 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     layer.metadata.set("wms_timeextent", f'{start_time:%Y-%m-%dT%H:%M:%S}Z/{start_time:%Y-%m-%dT%H:%M:%S}Z')
     layer.metadata.set("wms_default", f'{start_time:%Y-%m-%dT%H:%M:%S}Z')
     dataset.close()
+    print("Complete generate layer")
 
 def _fill_metadata_to_mapfile(netcdf_path, map_object, full_request):
     """"Add all needed web metadata to the generated map file."""
@@ -262,13 +265,16 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
 
 def _exists_on_ceph(satpy_product, start_time):
     exists = False
+    print("Start check exists")
     s3 = boto3.resource('s3',
                         endpoint_url=os.environ['S3_ENDPOINT_URL'],
                         aws_access_key_id=os.environ['S3_ACCESS_KEY'],
                         aws_secret_access_key=os.environ['S3_SECRET_KEY'])
 
     try:
+        print("Generate key ...")
         key = _generate_key(start_time, satpy_product['satpy_product_filename'])
+        print("load object ...")
         s3.Object(satpy_product['bucket'], key).load()
     except botocore.exceptions.ClientError as e:
         if e.response['Error']['Code'] == "404":
