@@ -110,6 +110,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
                                    full_request: Request,
                                    satpy_products: list = Query(default=[])):
     
+    print("Request query_params:", str(full_request.query_params))
     print("Request url scheme:", full_request.url.scheme)
     print("Request url netloc:", full_request.url.netloc)
     netcdf_path = netcdf_path.replace("//", "/")
@@ -181,7 +182,11 @@ async def generate_satpy_quicklook(netcdf_path: str,
     print("TYPE", ows_req.type)
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
         mapscript.msIO_installStdoutToBuffer()
-        map_object.OWSDispatch( ows_req )
+        try:
+            map_object.OWSDispatch( ows_req )
+        except Exception as e:
+            raise HTTPException(status_code=500,
+                                detail=f"mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
         result = mapscript.msIO_getStdoutBufferBytes()
     else:
@@ -231,7 +236,7 @@ def _fill_metadata_to_mapfile(netcdf_path, map_object, full_request):
     """"Add all needed web metadata to the generated map file."""
     map_object.web.metadata.set("wms_title", "WMS senda fastapi")
     map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook/{netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857")
+    map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
     map_object.setSize(10000, 10000)
