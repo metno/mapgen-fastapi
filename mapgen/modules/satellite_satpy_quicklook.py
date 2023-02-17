@@ -105,13 +105,14 @@ def _parse_config(netcdf_path):
 
     return regexp_pattern_module
 
-@router.get("/api/get_quicklook/{netcdf_path:path}", response_class=Response)
+@router.get("/api/get_quicklook{netcdf_path:path}", response_class=Response)
 async def generate_satpy_quicklook(netcdf_path: str,
                                    full_request: Request,
                                    satpy_products: list = Query(default=[])):
     
     print("Request url scheme:", full_request.url.scheme)
     print("Request url netloc:", full_request.url.netloc)
+    netcdf_path = netcdf_path.replace("//", "/")
     print(f'{netcdf_path}')
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
