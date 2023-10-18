@@ -24,13 +24,13 @@ import boto3
 import botocore
 import rasterio
 import traceback
-from fastapi.responses import Response
 from fastapi import Request, Query, HTTPException
 from satpy import Scene
 import mapscript
 from glob import glob
 from datetime import datetime
-import xml.dom.minidom
+
+from helpers import handle_request
 
 def _get_satpy_products(satpy_products, full_request, default_dataset):
     """Get the product list to handle."""
@@ -119,47 +119,7 @@ def generate_satpy_quicklook(netcdf_path: str,
                         layer)
         layer_no = map_object.insertLayer(layer)
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'satpy-products-{start_time:%Y%m%d%H%M%S}.map'))
-
-    ows_req = mapscript.OWSRequest()
-    ows_req.type = mapscript.MS_GET_REQUEST
-    try:
-        ows_req.loadParamsFromURL(str(full_request.query_params))
-    except mapscript.MapServerError:
-        ows_req = mapscript.OWSRequest()
-        ows_req.type = mapscript.MS_GET_REQUEST
-        pass
-    if not full_request.query_params or (ows_req.NumParams == 1 and 'satpy_products' in full_request.query_params):
-        print("Query params are empty or only contains satpy-product query parameter. Force getcapabilities")
-        ows_req.setParameter("SERVICE", "WMS")
-        ows_req.setParameter("VERSION", "1.3.0")
-        ows_req.setParameter("REQUEST", "GetCapabilities")
-    else:
-        print("ALL query params: ", str(full_request.query_params))
-    print("NumParams", ows_req.NumParams)
-    print("TYPE", ows_req.type)
-    if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
-        mapscript.msIO_installStdoutToBuffer()
-        try:
-            map_object.OWSDispatch( ows_req )
-        except Exception as e:
-            raise HTTPException(status_code=500,
-                                detail=f"mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
-        content_type = mapscript.msIO_stripStdoutBufferContentType()
-        result = mapscript.msIO_getStdoutBufferBytes()
-    else:
-        mapscript.msIO_installStdoutToBuffer()
-        dispatch_status = map_object.OWSDispatch(ows_req)
-        if dispatch_status != mapscript.MS_SUCCESS:
-            print("DISPATCH status", dispatch_status)
-        content_type = mapscript.msIO_stripStdoutBufferContentType()
-        mapscript.msIO_stripStdoutBufferContentHeaders()
-        _result = mapscript.msIO_getStdoutBufferBytes()
-
-        if content_type == 'application/vnd.ogc.wms_xml; charset=UTF-8':
-            content_type = 'text/xml'
-        dom = xml.dom.minidom.parseString(_result)
-        result = dom.toprettyxml(indent="", newl="")
-    return Response(result, media_type=content_type)
+    return handle_request(map_object, full_request)
 
 def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
