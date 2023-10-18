@@ -1,6 +1,7 @@
 ---
   - 'pattern': '^(.*satellite-thredds/polar-swath/\d{4}/\d{2}/\d{2}/)(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp|aqua|terra|fy3d)-(avhrr|viirs-mband|modis-1km|mersi2-1k)-(\d{14})-(\d{14})\.nc$'
-    'module': 'mapgen.modules.satellite_thredds_module'
+    'module': 'mapgen.modules.satellite_satpy_quicklook'
+    'module_function': 'generate_satpy_quicklook'
     'mapfile_template': '/mapfile-templates/mapfile.map'
     'map_file_bucket': 's-enda-mapfiles'
     'geotiff_bucket': 'geotiff-products-for-senda'

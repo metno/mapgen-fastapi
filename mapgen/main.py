@@ -22,7 +22,7 @@ from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 from mapgen.views import dashboard
 from mapgen.api import redirect
-from mapgen.modules import satellite_satpy_quicklook
+from mapgen.modules import get_quicklook
 
 app = fastapi.FastAPI(title="MapGen",
                       description="Prototype API for generation of mapfiles and redirect to mapserver",
@@ -43,7 +43,7 @@ MAX_PROCESSING_SECOND = 600
 def configure_routing():
     app.include_router(redirect.router)
     app.include_router(dashboard.router)
-    app.include_router(satellite_satpy_quicklook.router)
+    app.include_router(get_quicklook.router)
 
 def configure():
     configure_routing()
