@@ -66,7 +66,13 @@ def generate_satpy_quicklook(netcdf_path: str,
     print("Request url scheme:", full_request.url.scheme)
     print("Request url netloc:", full_request.url.netloc)
     netcdf_path = netcdf_path.replace("//", "/")
-    print(f'{netcdf_path}')
+    try:
+        if os.path.isabs(netcdf_path):
+            netcdf_path = netcdf_path[1:]
+        netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
+    except KeyError:
+        raise HTTPException(status_code=500, detail="Missing base dir in server config.")
+
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     print(satpy_products)
