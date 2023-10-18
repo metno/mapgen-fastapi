@@ -21,7 +21,6 @@ import fastapi
 from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 from mapgen.views import dashboard
-from mapgen.api import redirect
 from mapgen.modules import get_quicklook
 
 app = fastapi.FastAPI(title="MapGen",
@@ -41,7 +40,6 @@ MAX_PROCESSING_SECOND = 600
 
 
 def configure_routing():
-    app.include_router(redirect.router)
     app.include_router(dashboard.router)
     app.include_router(get_quicklook.router)
 
