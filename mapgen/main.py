@@ -24,8 +24,8 @@ from mapgen.views import dashboard
 from mapgen.modules import get_quicklook
 
 app = fastapi.FastAPI(title="MapGen",
-                      description="Prototype API for generation of mapfiles and redirect to mapserver",
-                      version="0.0.1",
+                      description="API for handeling OGC WMS request to data. Each data type needs an implemented module and a corresponding config.",
+                      version="1.0.0",
                       )
 
 app.add_middleware(
