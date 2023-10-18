@@ -24,9 +24,8 @@ import boto3
 import botocore
 import rasterio
 import traceback
-from fastapi.responses import HTMLResponse, FileResponse, Response
-# from fastapi import Request, Query, APIRouter, status
-from fastapi import Request, APIRouter, Query, HTTPException
+from fastapi.responses import Response
+from fastapi import Request, Query, HTTPException
 from satpy import Scene
 import mapscript
 from glob import glob
@@ -266,7 +265,6 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
                  'ellps': 'WGS84'}
 
     print(datetime.now(), "Before compute optimal bb area")
-    #bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict, resolution=7500)
     bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict)
     print(bb_area)
     print(bb_area.pixel_size_x)
@@ -288,19 +286,15 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
 
 def _parse_filename(netcdf_path, product_config):
     """Parse the netcdf to return start_time."""
-    pattern_match = '^(.*satellite-thredds/polar-swath/\d{4}/\d{2}/\d{2}/)(metopa|metopb|metopc|noaa18|noaa19|noaa20|npp|aqua|terra|fy3d)-(avhrr|viirs-mband|viirs-dnb|modis-1km|mersi2-1k)-(\d{14})-(\d{14})\.nc$'
     pattern_match = product_config['pattern']
     pattern = re.compile(pattern_match)
     mtchs = pattern.match(netcdf_path)
-    # start_time = None
     if mtchs:
         print("Pattern match:", mtchs.groups())
-        # start_time = datetime.strptime(mtchs.groups()[5], "%Y%m%d%H%M%S")
         return mtchs.groups()
     else:
         print("No match: ", netcdf_path)
-        raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}")
-    return None
+        raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
     if 'fy3d' in platform_name or 'aqua' in platform_name or 'terra' in platform_name:
