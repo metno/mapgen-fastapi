@@ -6,6 +6,7 @@
     'geotiff_bucket': 'geotiff-products-for-senda'
     'mapfiles_path': '.'
     'geotiff_tmp': '.'
+    'default_dataset': 'overview'
   - 'pattern': '^(.*satellite-thredds/polar-swath/\d{4}/\d{2}/\d{2}/)(noaa20|npp)-(viirs-iband)-(\d{14})-(\d{14})\.nc$'
     'module': 'mapgen.modules.satellite_thredds_module'
     'mapfile_template': '/mapfile-templates/mapfile.map'
