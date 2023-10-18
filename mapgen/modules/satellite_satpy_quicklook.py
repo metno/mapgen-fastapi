@@ -20,7 +20,6 @@ limitations under the License.
 import os
 import re
 import sys
-import yaml
 import boto3
 import botocore
 import rasterio
@@ -33,8 +32,6 @@ import mapscript
 from glob import glob
 from datetime import datetime
 import xml.dom.minidom
-
-router = APIRouter()
 
 def _get_satpy_products(satpy_products, full_request, default_dataset):
     """Get the product list to handle."""
@@ -61,54 +58,10 @@ def _get_satpy_products(satpy_products, full_request, default_dataset):
 def _get_mapfiles_path(regexp_pattern_module):
     return regexp_pattern_module['mapfiles_path']
 
-def _read_config_file(regexp_config_file):
-    regexp_config = None
-    try:
-        if os.path.exists(regexp_config_file):
-            with open(regexp_config_file) as f:
-                regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
-    except Exception as e:
-        print(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
-        pass
-    return regexp_config
-
-def _parse_config(netcdf_path):
-    default_regexp_config_filename = 'url-path-regexp-patterns.yaml'
-    default_regexp_config_dir = '/config'
-    if os.path.exists(os.path.join('./', default_regexp_config_filename)):
-        regexp_config_file = os.path.join('./', default_regexp_config_filename)
-    else:
-        regexp_config_file = os.path.join(default_regexp_config_dir,
-                                          default_regexp_config_filename)
-    regexp_config = _read_config_file(regexp_config_file)
-    regexp_pattern_module = None
-    if regexp_config:
-        try:
-            for url_path_regexp_pattern in regexp_config:
-                print(url_path_regexp_pattern)
-                pattern = re.compile(url_path_regexp_pattern['pattern'])
-                if pattern.match(netcdf_path):
-                    print("Got match. Need to load module:", url_path_regexp_pattern['module'])
-                    regexp_pattern_module = url_path_regexp_pattern
-                    break
-                else:
-                    print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
-                    print("Please review your config if you expect this path to be handled.")
-            
-        except Exception as e:
-            print(f"Exception in the netcdf_path match part with {str(e)}")
-            exc_info = sys.exc_info()
-            traceback.print_exception(*exc_info)
-            raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
-    if not regexp_pattern_module:
-        raise HTTPException(status_code=501, detail=f"Could not match against any pattern. Check the config.")
-
-    return regexp_pattern_module
-
-@router.get("/api/get_quicklook{netcdf_path:path}", response_class=Response)
-async def generate_satpy_quicklook(netcdf_path: str,
-                                   full_request: Request,
-                                   satpy_products: list = Query(default=[])):
+def generate_satpy_quicklook(netcdf_path: str,
+                             full_request: Request,
+                             satpy_products: list = Query(default=[]),
+                             product_config: dict = {}):
     
     print("Request query_params:", str(full_request.query_params))
     print("Request url scheme:", full_request.url.scheme)
@@ -118,7 +71,6 @@ async def generate_satpy_quicklook(netcdf_path: str,
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     print(satpy_products)
-    product_config = _parse_config(netcdf_path)
 
     resolution = None
     bucket = product_config['geotiff_bucket']
@@ -356,10 +308,3 @@ def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, 
     else:
         similar_netcdf_paths = glob(f'{path}{platform_name}-*-{start_time}-{end_time}.nc')
     return similar_netcdf_paths
-
-@router.get("/{image_path:path}")
-async def main(image_path: str):
-    """Need this to local images"""
-    print("image path:", image_path)
-    print("CWD: ", os.getcwd())
-    return FileResponse(image_path)
