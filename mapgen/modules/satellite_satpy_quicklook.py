@@ -137,7 +137,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
     satpy_products_to_generate = []
     for satpy_product in ms_satpy_products:
 
-        satpy_product_filename = f'{satpy_product}-{start_time:%Y%m%d%H%M%S}.tif'
+        satpy_product_filename = f'{satpy_product}-{start_time:%Y%m%d_%H%M%S}.tif'
         satpy_products_to_generate.append({'satpy_product': satpy_product,
                                            'satpy_product_filename': satpy_product_filename,
                                            'bucket': bucket})

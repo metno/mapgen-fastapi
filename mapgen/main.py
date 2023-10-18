@@ -51,6 +51,6 @@ def configure():
 
 if __name__ == '__main__':
     configure()
-    uvicorn.run(app, port=9000, host='localhost')
+    uvicorn.run(app, port=8999, host='localhost')
 else:
     configure()
