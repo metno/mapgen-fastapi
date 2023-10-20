@@ -55,3 +55,4 @@
     'module': 'mapgen.modules.arome_arctic_quicklook'
     'module_function': 'arome_arctic_quicklook'
     'default_dataset': 'air_temperature'
+    'mapfiles_path': '/tmp'

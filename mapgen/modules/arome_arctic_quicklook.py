@@ -282,6 +282,12 @@ def _parse_filename(netcdf_path, product_config):
         print("No match: ", netcdf_path)
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
+def _get_mapfiles_path(regexp_pattern_module):
+    try:
+        return regexp_pattern_module['mapfiles_path']
+    except KeyError:
+        return "./"
+
 def arome_arctic_quicklook(netcdf_path: str,
                            full_request: Request,
                            products: list = Query(default=[]),
@@ -336,7 +342,7 @@ def arome_arctic_quicklook(netcdf_path: str,
             if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                 layer_no = map_object.insertLayer(layer)
 
-    map_object.save(f'./arome-arctic-{forecast_time:%Y%m%d%H%M%S}.map')
+    map_object.save(os.path.join(_get_mapfiles_path(product_config), f'arome-arctic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
     # Handle the request and return results.
     return handle_request(map_object, full_request)
