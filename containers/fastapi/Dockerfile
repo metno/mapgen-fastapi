@@ -1,24 +1,34 @@
-ARG BASE_IMAGE=ubuntu:22.04
-FROM $BASE_IMAGE
+FROM docker.io/mambaorg/micromamba:1.5.1-jammy
 
 LABEL maintainer="massimods@met.no"
 
-ENV DEBIAN_FRONTEND=noninteractive
+#ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y apt-utils build-essential git python3-dev python3-venv python3-mapscript
+#RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y apt-utils build-essential git
+# python3-dev python3-venv python3-mapscript
 #cmake libpng-dev libcurl4-gnutls-dev libjpeg8-dev libaprutil1-dev libapr1-dev libpixman-1-dev libgdal-dev libpq-dev libsqlite3-dev libtiff-dev libgeotiff-dev libgeos-dev swig libfreetype-dev
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+#ENV VIRTUAL_ENV=/opt/venv
+#ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
     MAPGEN_VERSION=main
 
 COPY ./app /app
 # Install dependencies:
-COPY requirements.txt .
-RUN python3 -m venv $VIRTUAL_ENV \
-    && pip install -U pip \
-    && pip install -r requirements.txt \
-    && pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
+#COPY requirements.txt .
+#COPY environment.yaml .
+COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yaml /tmp/environment.yaml
+RUN micromamba install -y -n base --file /tmp/environment.yaml
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+USER $MAMBA_USER
+RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
+# RUN python3 -m venv $VIRTUAL_ENV \
+#     && pip install -U pip \
+#     && pip install -r requirements.txt \
+#     && pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
     # && ln -s /opt/venv/lib/python3.10/site-packages/mapgen/favicon.ico /app
     # && git clone https://github.com/MapServer/mapserver.git /tmp/mapserver \
     # && cd /tmp/mapserver \
@@ -28,11 +38,11 @@ RUN python3 -m venv $VIRTUAL_ENV \
     # && make install \
     # && make clean
 
-COPY ./start.sh /start.sh
+COPY --chown=$MAMBA_USER:$MAMBA_USER ./start.sh /start.sh
 
-COPY ./gunicorn_conf.py /gunicorn_conf.py
+COPY --chown=$MAMBA_USER:$MAMBA_USER ./gunicorn_conf.py /gunicorn_conf.py
 
-COPY ./start-reload.sh /start-reload.sh
+COPY --chown=$MAMBA_USER:$MAMBA_USER ./start-reload.sh /start-reload.sh
 RUN chmod +x /start.sh \
     && chmod +x /start-reload.sh
 
@@ -41,7 +51,7 @@ RUN chmod +x /start.sh \
 
 WORKDIR /app
 
-ENV PYTHONPATH=/app:/lib/python3/dist-packages/
+# ENV PYTHONPATH=/app:/lib/python3/dist-packages/
 
 EXPOSE 80
 
