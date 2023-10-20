@@ -30,7 +30,7 @@ import mapscript
 from glob import glob
 from datetime import datetime
 
-from helpers import handle_request
+from mapgen.modules.helpers import handle_request
 
 def _get_satpy_products(satpy_products, full_request, default_dataset):
     """Get the product list to handle."""
@@ -67,7 +67,9 @@ def generate_satpy_quicklook(netcdf_path: str,
     print("Request url netloc:", full_request.url.netloc)
     netcdf_path = netcdf_path.replace("//", "/")
     try:
-        if os.path.isabs(netcdf_path):
+        if netcdf_path.startswith(product_config['base_netcdf_directory']):
+            print("Request with full path. Please fix your request. Depricated from version 2.0.0.")
+        elif os.path.isabs(netcdf_path):
             netcdf_path = netcdf_path[1:]
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
