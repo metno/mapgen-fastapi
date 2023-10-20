@@ -1,0 +1,31 @@
+name: base
+channels:
+- conda-forge
+dependencies:
+- python=3.11
+- pip
+- wheel
+- fastapi
+- uvicorn
+- httpx
+- requests
+- aiofiles
+- pydantic
+- starlette
+- celery
+- Jinja2
+- itsdangerous
+- gunicorn
+- uvloop
+- httptools
+- pyyaml
+- bokeh
+- xarray
+- boto3
+- netcdf4
+- jinja2
+- pytest-mock
+- rasterio
+- pandas
+- satpy
+- mapserver
