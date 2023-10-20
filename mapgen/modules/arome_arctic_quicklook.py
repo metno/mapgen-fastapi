@@ -175,57 +175,60 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp):
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'y']:
             continue
-        print(f"search for dim_name {dim_name} in query parameters.")
-        if dim_name in qp:
-            print(f"Found dimension {dim_name} in request")
-            if dim_name == 'time':
-                _ds = {}
-                _ds['dim_name'] = dim_name
-                _ds['ds_size'] = ds[dim_name].data.size
-                requested_dimensions = datetime.datetime.strptime(qp[dim_name], "%Y-%m-%dT%H:%M:%SZ")
-                time_as_band = 0
-                for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                    print(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
-                    if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                        print(d,requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'), requested_dimensions.timestamp())
-                        break
-                    time_as_band += 1
+        for _dim_name in [dim_name,f'dim_{dim_name}']:
+            print(f"search for dim_name {_dim_name} in query parameters.")
+            if _dim_name in qp:
+                print(f"Found dimension {_dim_name} in request")
+                if dim_name == 'time':
+                    _ds = {}
+                    _ds['dim_name'] = dim_name
+                    _ds['ds_size'] = ds[dim_name].data.size
+                    requested_dimensions = datetime.datetime.strptime(qp[_dim_name], "%Y-%m-%dT%H:%M:%SZ")
+                    time_as_band = 0
+                    for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                        print(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                        if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                            print(d,requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'), requested_dimensions.timestamp())
+                            break
+                        time_as_band += 1
+                    else:
+                        print("could not find a mathcing dimension value.")
+                        raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                    _ds['selected_band_number'] = time_as_band
+                    dimension_search.append(_ds)
                 else:
-                    print("could not find a mathcing dimension value.")
-                    raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[dim_name]} value for layer {variable}.")
-                _ds['selected_band_number'] = time_as_band
-                dimension_search.append(_ds)
+                    print(f"other dimension {dim_name}")
+                    _ds = {}
+                    _ds['dim_name'] = dim_name
+                    _ds['ds_size'] = ds[dim_name].data.size
+                    selected_band_no = 0
+                    for d in ds[dim_name].data:
+                        print(f"compare dim value {d} to req value {qp[_dim_name]}")
+                        if float(d) == float(qp[_dim_name]):
+                            break
+                        selected_band_no += 1
+                    else:
+                        print("could not find a mathcing dimension value.")
+                        raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                    _ds['selected_band_number'] = selected_band_no
+                    dimension_search.append(_ds)
+                break
             else:
-                print(f"other dimension {dim_name}")
-                _ds = {}
-                _ds['dim_name'] = dim_name
-                _ds['ds_size'] = ds[dim_name].data.size
-                selected_band_no = 0
-                for d in ds[dim_name].data:
-                    print(f"compare dim value {d} to req value {qp[dim_name]}")
-                    if float(d) == float(qp[dim_name]):
-                        break
-                    selected_band_no += 1
-                else:
-                    print("could not find a mathcing dimension value.")
-                    raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[dim_name]} value for layer {variable}.")
-                _ds['selected_band_number'] = selected_band_no
-                dimension_search.append(_ds)
+                if ds[dim_name].data.size == 1:
+                    print(f"Dimension with size 0 {dim_name}")
+                    _ds = {}
+                    _ds['dim_name'] = dim_name
+                    _ds['ds_size'] = ds[dim_name].data.size
+                    _ds['selected_band_number'] = 0
+                    dimension_search.append(_ds)
+                    break
         else:
-            if ds[dim_name].data.size == 1:
-                print(f"Dimension with size 0 {dim_name}")
-                _ds = {}
-                _ds['dim_name'] = dim_name
-                _ds['ds_size'] = ds[dim_name].data.size
-                _ds['selected_band_number'] = 0
-                dimension_search.append(_ds)
-            else:
-                print(f"Could not find {dim_name}. Make some ugly assumption")
-                _ds = {}
-                _ds['dim_name'] = dim_name
-                _ds['ds_size'] = ds[dim_name].data.size
-                _ds['selected_band_number'] = 0
-                dimension_search.append(_ds)
+            print(f"Could not find {_dim_name}. Make some ugly assumption")
+            _ds = {}
+            _ds['dim_name'] = dim_name
+            _ds['ds_size'] = ds[dim_name].data.size
+            _ds['selected_band_number'] = 0
+            dimension_search.append(_ds)
     print(dimension_search)
 
     if len(dimension_search) == 1:
