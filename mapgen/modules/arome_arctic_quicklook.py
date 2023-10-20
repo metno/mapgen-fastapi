@@ -36,7 +36,7 @@ Needed entries in the config:
 """
 import os
 import re
-import netCDF4
+import pandas
 import datetime
 import mapscript
 from fastapi import Request, Query, HTTPException
@@ -229,22 +229,23 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp):
     print(dimension_search)
 
     if len(dimension_search) == 1:
-        print("Lend 1")
-        min_val = np.min(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
-        max_val = np.max(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
+        print("Len 1")
+        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
+        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
     elif len(dimension_search) == 2:
-        print("Lend 2")
-        min_val = np.min(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
-        max_val = np.max(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+        print("Len 2")
+        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
     # Find which band
     elif len(dimension_search) == 3:
-        print("Lend 3")
-        min_val = np.min(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
-        max_val = np.max(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+        print("Len 3")
+        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
 
+    print("MIN:MAX ",min_val, max_val)
     #Grayscale
     s = mapscript.classObj(layer)
-    s.name = "orig"
+    s.name = "Linear grayscale using min and max not nan from data"
     s.group = 'GRAYSCALE'
     style = mapscript.styleObj(s)
     style.rangeitem = 'pixel'
@@ -297,15 +298,21 @@ def arome_arctic_quicklook(netcdf_path: str,
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
 
-    # Parse the netcdf filename to get start time or reference time
-    _, _forecast_time = _parse_filename(netcdf_path, product_config)
-    forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
-    print(forecast_time)
-
     # Read all variables names from the netcdf file.
     ds_disk = xr.open_dataset(netcdf_path)
     variables = list(ds_disk.keys())
-    print(variables)
+
+    #get forecast reference time from dataset
+    try:
+        forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
+    except KeyError:
+        print("Could not find forecast time or analysis time from dataset. Try parse from filename.")
+        # Parse the netcdf filename to get start time or reference time
+        _, _forecast_time = _parse_filename(netcdf_path, product_config)
+        forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
+        print(forecast_time)
+
+    # print(variables)
     # Loop over all variable names to add layer for each variable including needed dimmensions.
     #   Time
     #   Height

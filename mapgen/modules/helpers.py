@@ -57,9 +57,9 @@ def find_config_for_this_netcdf(netcdf_path):
                     print("Got match. Need to load module:", url_path_regexp_pattern['module'])
                     regexp_pattern_module = url_path_regexp_pattern
                     break
-                else:
-                    print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
-                    print("Please review your config if you expect this path to be handled.")
+            else:
+                print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                print("Please review your config if you expect this path to be handled.")
             
         except Exception as e:
             print(f"Exception in the netcdf_path match part with {str(e)}")
@@ -67,7 +67,7 @@ def find_config_for_this_netcdf(netcdf_path):
             traceback.print_exception(*exc_info)
             raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
     if not regexp_pattern_module:
-        raise HTTPException(status_code=501, detail=f"Could not match against any pattern. Check the config.")
+        raise HTTPException(status_code=501, detail=f"The server have no setup to handle the requested file {netcdf_path}. Check with the maintainer if this could be added.")
 
     return regexp_pattern_module
 
