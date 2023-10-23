@@ -29,3 +29,4 @@ dependencies:
 - pandas
 - satpy
 - mapserver
+- gdal
