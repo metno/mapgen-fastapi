@@ -127,6 +127,27 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     if dims_list:
         layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
 
+    #layer.labelitem = 'contour'
+    s = mapscript.classObj(layer)
+    s.name = "contour"
+    s.group = "contour"
+    style = mapscript.styleObj(s)
+    style.rangeitem = 'pixel'
+    style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+    style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+    # style.width = 1
+    # style.color = mapscript.colorObj(red=0, green=0, blue=255)
+
+    s1 = mapscript.classObj(layer)
+    s1.name = "Linear grayscale using min and max not nan from data"
+    s1.group = 'raster'
+    style1 = mapscript.styleObj(s1)
+    style1.rangeitem = 'pixel'
+    style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+    style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+    #style.minvalue = float(min_val)
+    #style.maxvalue = float(max_val)
+
     return True
 
 def _generate_getcapabilities_contour(layer, ds, variable, grid_mapping_cache, netcdf_file):
@@ -342,10 +363,19 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
         variable = qp['layer']
     except KeyError:
         variable = qp['layers']
+    try:
+        style = qp['styles']
+    except KeyError:
+        style = qp['style']
+    if style == "":
+        print("Empty style. force raster.")
+        style = 'raster'
+    print(f"Selected style: {style}")
+
     actual_variable = variable
-    if variable.endswith('_contour'):
-        actual_variable = '_'.join(variable.split("_")[:-1])
-    elif variable.endswith('_vector'):
+    #if style in 'contour': #variable.endswith('_contour'):
+    #    actual_variable = '_'.join(variable.split("_")[:-1])
+    if variable.endswith('_vector'):
         actual_x_variable = '_'.join(['x'] + variable.split("_")[:-1])
         actual_y_variable = '_'.join(['y'] + variable.split("_")[:-1])
         vector_variable_name = variable
@@ -375,7 +405,9 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
         layer.data = './var.vrt'
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
-    if variable.endswith('_contour'):
+
+    if style in 'contour': #variable.endswith('_contour'):
+        print("Style in contour for config")
         layer.type = mapscript.MS_LAYER_LINE
         layer.setConnectionType(mapscript.MS_CONTOUR, "")
         layer.setProcessingKey('CONTOUR_INTERVAL', f'{500}')
@@ -426,7 +458,8 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
         print("MIN:MAX ",min_val, max_val)
         #Grayscale
         s = mapscript.classObj(layer)
-        if variable.endswith('_contour'):
+        if style in 'contour': #variable.endswith('_contour'):
+            print("Style in contour for style setup.")
             layer.labelitem = 'contour'
             s.name = "contour"
             style = mapscript.styleObj(s)
@@ -446,7 +479,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
             s.addLabel(label)
         else:
             s.name = "Linear grayscale using min and max not nan from data"
-            s.group = 'GRAYSCALE'
+            s.group = 'raster'
             style = mapscript.styleObj(s)
             style.rangeitem = 'pixel'
             style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
@@ -542,12 +575,12 @@ def arome_arctic_quicklook(netcdf_path: str,
             layer = mapscript.layerObj()
             if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                 layer_no = map_object.insertLayer(layer)
-            if variable == 'air_pressure_at_sea_level':
-                layer_contour = mapscript.layerObj()
-                if _generate_getcapabilities_contour(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
-                    print("Insert layer")
-                    layer_no = map_object.insertLayer(layer_contour)
-                    print("Inserted layer")
+            # if variable == 'air_pressure_at_sea_level':
+            #     layer_contour = mapscript.layerObj()
+            #     if _generate_getcapabilities_contour(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
+            #         print("Insert layer")
+            #         layer_no = map_object.insertLayer(layer_contour)
+            #         print("Inserted layer")
             if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                 print(f"Add wind vector layer for {variable}.")
                 layer_contour = mapscript.layerObj()
