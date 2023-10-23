@@ -92,6 +92,8 @@ def handle_request(map_object, full_request):
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
         mapscript.msIO_installStdoutToBuffer()
         try:
+            if ows_req.getValueByName("STYLES") in 'contour':
+                ows_req.setParameter("STYLES", "")
             map_object.OWSDispatch( ows_req )
         except Exception as e:
             raise HTTPException(status_code=500,
