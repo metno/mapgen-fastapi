@@ -42,6 +42,7 @@ import mapscript
 from fastapi import Request, Query, HTTPException
 import numpy as np
 import xarray as xr
+from osgeo import gdal
 from pyproj import CRS
 from mapgen.modules.helpers import handle_request
 
@@ -96,6 +97,58 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         if dim_name in ['x', 'y']:
             continue
         if dim_name in 'time':
+            #print("handle time")
+            diff, is_range = find_time_diff(ds, dim_name)
+            if is_range:
+                diff_string = 'PT1H'
+                if diff == datetime.timedelta(hours=1):
+                    diff_string = "PT1H"
+                elif diff == datetime.timedelta(hours=3):
+                    diff_string = "PT3H"
+                else:
+                    print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
+                start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
+            else:
+                print("time list not implemented.")
+            layer.metadata.set("wms_default", f'{start_time}')
+        else:
+            if ds[dim_name].data.size > 1:
+                #print(f"add dimension {dim_name} for variable {variable}.")
+                dims_list.append(dim_name)
+                layer.metadata.set(f"wms_{dim_name}_item", dim_name)
+                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
+                layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
+            # else:
+            #     print(f"Skipping dimension {dim_name} due to one size dimmension.")
+
+    if dims_list:
+        layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
+
+    return True
+
+def _generate_getcapabilities_contour(layer, ds, variable, grid_mapping_cache, netcdf_file):
+    """Generate getcapabilities for the netcdf file."""
+    print("ADDING contour")
+    grid_mapping_name = _find_projection(ds, variable)
+    if not grid_mapping_name:
+        return None
+    layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    layer.status = 1
+    layer.data = f'NETCDF:{netcdf_file}:{variable}'
+    layer.type = mapscript.MS_LAYER_LINE
+    layer.name = f'{variable}_contour'
+    layer.metadata.set("wms_title", f'{variable}_contour')
+    layer.setConnectionType(mapscript.MS_CONTOUR, "")
+    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
+    layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
+    dims_list = []
+    for dim_name in ds[variable].dims:
+        if dim_name in ['x', 'y']:
+            continue
+        if dim_name in 'time':
             print("handle time")
             diff, is_range = find_time_diff(ds, dim_name)
             if is_range:
@@ -113,10 +166,64 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
                 print("time list not implemented.")
             layer.metadata.set("wms_default", f'{start_time}')
         else:
-            if ds[dim_name].data.size == 1:
-                print(f"Skipping dimension {dim_name} due to one size dimmension.")
+            if ds[dim_name].data.size > 1:
+                #print(f"add dimension {dim_name} for variable {variable}.")
+                dims_list.append(dim_name)
+                layer.metadata.set(f"wms_{dim_name}_item", dim_name)
+                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
+                layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
+            # else:
+            #     print(f"Skipping dimension {dim_name} due to one size dimmension.")
+    if dims_list:
+        layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
+
+    print("ADDing contour at end")
+
+    return True
+
+def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file):
+    """Generate getcapabilities for vector fiels for the netcdf file."""
+    print("ADDING vector")
+    grid_mapping_name = _find_projection(ds, variable)
+    if not grid_mapping_name:
+        return None
+    layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    layer.status = 1
+    if variable.startswith('x_wind'):
+        x_variable = variable
+        y_variable = x_variable.replace('x', 'y')
+        vector_variable_name = '_'.join(variable.split("_")[1:])
+    layer.data = f'NETCDF:{netcdf_file}:{variable}'
+    layer.type = mapscript.MS_LAYER_LINE
+    layer.name = f'{vector_variable_name}_vector'
+    layer.metadata.set("wms_title", f'{vector_variable_name}')
+    layer.setConnectionType(mapscript.MS_CONTOUR, "")
+    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
+    layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
+    dims_list = []
+    for dim_name in ds[variable].dims:
+        if dim_name in ['x', 'y']:
+            continue
+        if dim_name in 'time':
+            print("handle time")
+            diff, is_range = find_time_diff(ds, dim_name)
+            if is_range:
+                diff_string = 'PT1H'
+                if diff == datetime.timedelta(hours=1):
+                    diff_string = "PT1H"
+                elif diff == datetime.timedelta(hours=3):
+                    diff_string = "PT3H"
+                else:
+                    print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
+                start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
             else:
-                print(f"add dimension {dim_name} for variable {variable}.")
+                print("time list not implemented.")
+            layer.metadata.set("wms_default", f'{start_time}')
+        else:
+            if ds[dim_name].data.size > 1:
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
                 layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
@@ -124,6 +231,8 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
     if dims_list:
         layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
+
+    print("ADDing vector at end")
 
     return True
 
@@ -150,29 +259,10 @@ def find_time_diff(ds, dim_name):
         prev = stamp
     return diff,is_range
 
-def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp):
-    try:
-        variable = qp['layer']
-    except KeyError:
-        variable = qp['layers']
-    grid_mapping_name = _find_projection(ds, variable)
-    layer.setProjection(grid_mapping_cache[grid_mapping_name])
-    layer.status = 1
-    layer.data = f'NETCDF:{netcdf_file}:{variable}'
-    layer.type = mapscript.MS_LAYER_RASTER
-    layer.name = variable
-    layer.metadata.set("wms_title", variable)
-    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
-    layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
-
-    # if 'time' in full_request.query_params:
-    #     requested_dimensions['time'] = datetime.strptime(full_request.query_params['TIME'], "%Y-%m-%dT%H:%M:%SZ")
-    # else:
-    #     print("no time")
-
+def _find_dimensions(ds, actual_variable, variable, qp):
     # Find available dimension not larger than 1
     dimension_search = []
-    for dim_name in ds[variable].dims:
+    for dim_name in ds[actual_variable].dims:
         if dim_name in ['x', 'y']:
             continue
         for _dim_name in [dim_name,f'dim_{dim_name}']:
@@ -230,37 +320,13 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp):
             _ds['selected_band_number'] = 0
             dimension_search.append(_ds)
     print(dimension_search)
+    return dimension_search
 
-    if len(dimension_search) == 1:
-        print("Len 1")
-        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
-        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],:,:].data)
-    elif len(dimension_search) == 2:
-        print("Len 2")
-        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
-        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
-    # Find which band
-    elif len(dimension_search) == 3:
-        print("Len 3")
-        min_val = np.nanmin(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
-        max_val = np.nanmax(ds[variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
-
-    print("MIN:MAX ",min_val, max_val)
-    #Grayscale
-    s = mapscript.classObj(layer)
-    s.name = "Linear grayscale using min and max not nan from data"
-    s.group = 'GRAYSCALE'
-    style = mapscript.styleObj(s)
-    style.rangeitem = 'pixel'
-    style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
-    style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
-    style.minvalue = float(min_val)
-    style.maxvalue = float(max_val)
-
+def _calc_band_number_from_dimensions(dimension_search):
     band_number = 0
     first = True
-    dimension_search.reverse()
-    for _ds in dimension_search:
+    #dimension_search.reverse()
+    for _ds in dimension_search[::-1]:
         if first:
             band_number += _ds['selected_band_number'] + 1
         else:
@@ -269,7 +335,124 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp):
         prev_ds = _ds
 
     print(f"selected band number {band_number}")
-    layer.setProcessingKey('BANDS', f'{band_number}')
+    return band_number
+
+def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
+    try:
+        variable = qp['layer']
+    except KeyError:
+        variable = qp['layers']
+    actual_variable = variable
+    if variable.endswith('_contour'):
+        actual_variable = '_'.join(variable.split("_")[:-1])
+    elif variable.endswith('_vector'):
+        actual_x_variable = '_'.join(['x'] + variable.split("_")[:-1])
+        actual_y_variable = '_'.join(['y'] + variable.split("_")[:-1])
+        vector_variable_name = variable
+        actual_variable = actual_x_variable
+        print("VECTOR", vector_variable_name, actual_x_variable, actual_y_variable)
+
+    dimension_search = _find_dimensions(ds, actual_variable, variable, qp)
+    band_number = _calc_band_number_from_dimensions(dimension_search)
+    if variable.endswith('_vector'):
+        layer.setProcessingKey('BANDS', f'1,2')
+    else:
+        layer.setProcessingKey('BANDS', f'{band_number}')
+
+    grid_mapping_name = _find_projection(ds, actual_variable)
+    layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    layer.status = 1
+    if variable.endswith('_vector'):
+        gdal.BuildVRT("./xvar.vrt",
+                    [f'NETCDF:{netcdf_file}:{actual_x_variable}'],
+                    **{'bandList': [band_number]})
+        gdal.BuildVRT("./yvar.vrt",
+                    [f'NETCDF:{netcdf_file}:{actual_y_variable}'],
+                    **{'bandList': [band_number]})
+        gdal.BuildVRT("./var.vrt",
+                    ['./xvar.vrt', './yvar.vrt'],
+                    **{'separate': True})
+        layer.data = './var.vrt'
+    else:
+        layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
+    if variable.endswith('_contour'):
+        layer.type = mapscript.MS_LAYER_LINE
+        layer.setConnectionType(mapscript.MS_CONTOUR, "")
+        layer.setProcessingKey('CONTOUR_INTERVAL', f'{500}')
+        layer.setProcessingKey('CONTOUR_ITEM', 'contour')
+        layer.setGeomTransform('smoothsia(generalize([shape], 0.25*[data_cellsize]))')
+    elif variable.endswith('_vector'):
+        layer.setConnectionType(mapscript.MS_UVRASTER, "")
+        layer.type = mapscript.MS_LAYER_POINT
+    else:
+        layer.type = mapscript.MS_LAYER_RASTER
+    layer.name = variable
+    if variable.endswith('_vector'):
+        layer.metadata.set("wms_title", '_'.join(variable.split("_")[:-1]))
+    else:
+        layer.metadata.set("wms_title", variable)
+    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
+    layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
+
+
+    if variable.endswith('_vector'):
+        s = mapscript.classObj(layer)
+        style = mapscript.styleObj(s)
+        style.updateFromString('STYLE SYMBOL "horizline" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR 100 255 0 END')
+        style.setSymbolByName(map_obj, "horizline")
+        layer.setProcessingKey('UV_SIZE_SCALE', '2')
+
+        # #style.autoangle = "[uv_angle]"
+        # style.angle = 43
+        # #"[uv_angle]"
+        #style.size = style.size*2
+        # #"[uv_length]"
+        # style.width = 3
+        # style.color = mapscript.colorObj(red=100, green=255, blue=0)
+    else:
+        if len(dimension_search) == 1:
+            print("Len 1")
+            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+        elif len(dimension_search) == 2:
+            print("Len 2 of ", actual_variable)
+            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+        # Find which band
+        elif len(dimension_search) == 3:
+            print("Len 3")
+            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+        print("MIN:MAX ",min_val, max_val)
+        #Grayscale
+        s = mapscript.classObj(layer)
+        if variable.endswith('_contour'):
+            layer.labelitem = 'contour'
+            s.name = "contour"
+            style = mapscript.styleObj(s)
+            style.width = 1
+            style.color = mapscript.colorObj(red=0, green=0, blue=255)
+            label = mapscript.labelObj()
+            label.setText('(tostring(([contour]/100),"%.0f"))')
+            #label.setText("(tostring(([contour]/100),'%.0f'))")
+            print(label.convertToString())
+            label.color = mapscript.colorObj(red=0, green=0, blue=255)
+            #label.font = 'sans'
+            # TYPE truetype
+            label.size = 10
+            label.position = mapscript.MS_CC
+            label.force = True
+            label.angle = 0 #mapscript.MS_AUTO
+            s.addLabel(label)
+        else:
+            s.name = "Linear grayscale using min and max not nan from data"
+            s.group = 'GRAYSCALE'
+            style = mapscript.styleObj(s)
+            style.rangeitem = 'pixel'
+            style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+            style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+            style.minvalue = float(min_val)
+            style.maxvalue = float(max_val)
 
     return True
 
@@ -332,18 +515,44 @@ def arome_arctic_quicklook(netcdf_path: str,
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, ds_disk)
 
+    symbol = mapscript.symbolObj("horizline")
+    symbol.name = "horizline"
+    symbol.type = mapscript.MS_SYMBOL_VECTOR
+    po = mapscript.pointObj()
+    po.setXY(0, 0)
+    lo = mapscript.lineObj()
+    lo.add(po)
+    po.setXY(1, 0)
+    lo.add(po)
+    symbol.setPoints(lo)
+
+    symbol_obj = mapscript.symbolSetObj()
+    symbol_obj.appendSymbol(symbol)
+    symbol_obj.save("./symbol.sym")
+    map_object.setSymbolSet("./symbol.sym")
 
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
     print(qp)
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         layer = mapscript.layerObj()
-        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp):
+        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object):
             layer_no = map_object.insertLayer(layer)
     else:
         for variable in variables:
             layer = mapscript.layerObj()
             if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                 layer_no = map_object.insertLayer(layer)
+            if variable == 'air_pressure_at_sea_level':
+                layer_contour = mapscript.layerObj()
+                if _generate_getcapabilities_contour(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                    print("Insert layer")
+                    layer_no = map_object.insertLayer(layer_contour)
+                    print("Inserted layer")
+            if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
+                print(f"Add wind vector layer for {variable}.")
+                layer_contour = mapscript.layerObj()
+                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                    layer_no = map_object.insertLayer(layer_contour)
 
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'arome-arctic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
