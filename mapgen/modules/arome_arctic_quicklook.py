@@ -358,7 +358,7 @@ def _calc_band_number_from_dimensions(dimension_search):
     print(f"selected band number {band_number}")
     return band_number
 
-def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
+def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config):
     try:
         variable = qp['layer']
     except KeyError:
@@ -393,16 +393,17 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj):
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     if variable.endswith('_vector'):
-        gdal.BuildVRT("./xvar.vrt",
+        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "xvar.vrt"),
                     [f'NETCDF:{netcdf_file}:{actual_x_variable}'],
                     **{'bandList': [band_number]})
-        gdal.BuildVRT("./yvar.vrt",
+        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "yvar.vrt"),
                     [f'NETCDF:{netcdf_file}:{actual_y_variable}'],
                     **{'bandList': [band_number]})
-        gdal.BuildVRT("./var.vrt",
-                    ['./xvar.vrt', './yvar.vrt'],
+        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "var.vrt"),
+                    [os.path.join(_get_mapfiles_path(product_config), 'xvar.vrt'),
+                     os.path.join(_get_mapfiles_path(product_config), 'yvar.vrt')],
                     **{'separate': True})
-        layer.data = './var.vrt'
+        layer.data = os.path.join(_get_mapfiles_path(product_config), 'var.vrt')
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
@@ -561,14 +562,14 @@ def arome_arctic_quicklook(netcdf_path: str,
 
     symbol_obj = mapscript.symbolSetObj()
     symbol_obj.appendSymbol(symbol)
-    symbol_obj.save("./symbol.sym")
-    map_object.setSymbolSet("./symbol.sym")
+    symbol_obj.save(os.path.join(_get_mapfiles_path(product_config), "symbol.sym"))
+    map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config),"symbol.sym"))
 
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
     print(qp)
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         layer = mapscript.layerObj()
-        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object):
+        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config):
             layer_no = map_object.insertLayer(layer)
     else:
         for variable in variables:
