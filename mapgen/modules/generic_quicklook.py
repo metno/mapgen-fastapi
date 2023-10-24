@@ -55,15 +55,28 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, xr_dat
     map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
-    if xr_dataset.dims['x'] and xr_dataset.dims['y']:
+    try:
         map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
-    else:
-        map_object.setSize(2000, 2000)
+    except KeyError:
+        try:
+            map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
+        except KeyError:
+            map_object.setSize(2000, 2000)
     map_object.units = mapscript.MS_DD
-    map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
-                         float(xr_dataset.attrs['geospatial_lat_min']),
-                         float(xr_dataset.attrs['geospatial_lon_max']),
-                         float(xr_dataset.attrs['geospatial_lat_max']))
+    try:
+        map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
+                            float(xr_dataset.attrs['geospatial_lat_min']),
+                            float(xr_dataset.attrs['geospatial_lon_max']),
+                            float(xr_dataset.attrs['geospatial_lat_max']))
+    except KeyError:
+        try:
+            map_object.setExtent(float(np.nanmin(xr_dataset['longitude'].data)),
+                                 float(np.nanmin(xr_dataset['latitude'].data)),
+                                 float(np.nanmax(xr_dataset['longitude'].data)),
+                                 float(np.nanmax(xr_dataset['latitude'].data)))
+        except KeyError:
+            print("Could not detect extent of datdaset. Force full Earth.")
+            map_object.setExtent(-180, -90, 180, 90)
     return
 
 def _find_projection(ds, variable):
@@ -94,10 +107,11 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'y']:
+        if dim_name in ['x', 'y', 'longitude', 'latitude']:
             continue
+        print(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
-            #print("handle time")
+            print("handle time")
             diff, is_range = find_time_diff(ds, dim_name)
             if is_range:
                 diff_string = 'PT1H'
@@ -116,11 +130,18 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         else:
             if ds[dim_name].data.size > 1:
                 #print(f"add dimension {dim_name} for variable {variable}.")
+                actual_dim_name = dim_name
+                if dim_name == 'height':
+                    print("Rename getcapabilities height dimension to height_dimension.")
+                    dim_name = dim_name + "_dimension"
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
-                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
-                layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
-                layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
+                try:
+                    layer.metadata.set(f"wms_{dim_name}_units", ds[actual_dim_name].attrs['units'])
+                except KeyError:
+                    print(f"Failed to set metadata units for dimmension name {dim_name}")
+                layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[actual_dim_name].data]))
+                layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[actual_dim_name].data)))
             # else:
             #     print(f"Skipping dimension {dim_name} due to one size dimmension.")
 
@@ -171,7 +192,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'y']:
+        if dim_name in ['x', 'y', 'longitude', 'latitude']:
             continue
         if dim_name in 'time':
             print("handle time")
@@ -194,7 +215,10 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             if ds[dim_name].data.size > 1:
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
-                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                try:
+                    layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                except KeyError:
+                    layer.metadata.set(f"wms_{dim_name}_units", "1")
                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
     if dims_list:
@@ -205,10 +229,17 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     return True
 
 def _extract_extent(ds, variable):
-    ll_x = min(ds[variable].coords['x'].data)
-    ur_x = max(ds[variable].coords['x'].data)
-    ll_y = min(ds[variable].coords['y'].data)
-    ur_y = max(ds[variable].coords['y'].data)
+    try:
+        ll_x = min(ds[variable].coords['x'].data)
+        ur_x = max(ds[variable].coords['x'].data)
+        ll_y = min(ds[variable].coords['y'].data)
+        ur_y = max(ds[variable].coords['y'].data)
+    except KeyError:
+        ll_x = min(ds[variable].coords['longitude'].data)
+        ur_x = max(ds[variable].coords['longitude'].data)
+        ll_y = min(ds[variable].coords['latitude'].data)
+        ur_y = max(ds[variable].coords['latitude'].data)
+
     return ll_x,ur_x,ll_y,ur_y
 
 def find_time_diff(ds, dim_name):
@@ -231,9 +262,12 @@ def _find_dimensions(ds, actual_variable, variable, qp):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'y']:
+        if dim_name in ['x', 'y', 'longitude', 'latitude']:
             continue
-        for _dim_name in [f'dim_{dim_name}']:
+        for _dim_name in [f'{dim_name}', f'dim_{dim_name}']:
+            if _dim_name == 'height':
+                print(f"Can not have a dimension name height as this will conflict with query parameter HEIGHT as the size in image.")
+                _dim_name = _dim_name + '_dimension'
             print(f"search for dim_name {_dim_name} in query parameters.")
             if _dim_name in qp:
                 print(f"Found dimension {_dim_name} in request")
@@ -403,7 +437,17 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             print("Len 3")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
-        print("MIN:MAX ",min_val, max_val)
+        else:
+            print("Undefined lenght of dimension search ", len(dimension_search))
+        print("MIN:MAX ", min_val, max_val)
+        # print(ds[actual_variable].attrs)
+        # if 'scale_factor' in ds[actual_variable].attrs:
+        #     print("Setting scale factor to the data.")
+        #     min_val *= ds[actual_variable].attrs['scale_factor']
+        #     max_val *= ds[actual_variable].attrs['scale_factor']
+        #     print("Scaled with scale_factor MIN:MAX ", min_val, max_val)
+        #     layer.setProcessingKey("SCALE",f'{min_val},{max_val}')
+        #     layer.setProcessingKey("SCALE_BUCKETS", "256")
         #Grayscale
         s = mapscript.classObj(layer)
         if style in 'contour': #variable.endswith('_contour'):
@@ -426,6 +470,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             label.angle = 0 #mapscript.MS_AUTO
             s.addLabel(label)
         else:
+            print("Raster scaling")
             s.name = "Linear grayscale using min and max not nan from data"
             s.group = 'raster'
             style = mapscript.styleObj(s)
@@ -474,7 +519,7 @@ def generic_quicklook(netcdf_path: str,
         raise HTTPException(status_code=404, detail="Missing netcdf path")
 
     # Read all variables names from the netcdf file.
-    ds_disk = xr.open_dataset(netcdf_path)
+    ds_disk = xr.open_dataset(netcdf_path, mask_and_scale=False)
     variables = list(ds_disk.keys())
 
     #get forecast reference time from dataset
@@ -523,7 +568,7 @@ def generic_quicklook(netcdf_path: str,
                 if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
                     layer_no = map_object.insertLayer(layer_contour)
 
-    map_object.save(os.path.join(_get_mapfiles_path(product_config), f'arome-arctic-{forecast_time:%Y%m%d%H%M%S}.map'))
+    map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
     # Handle the request and return results.
     return handle_request(map_object, full_request)
