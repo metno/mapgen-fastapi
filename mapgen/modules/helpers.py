@@ -94,6 +94,10 @@ def handle_request(map_object, full_request):
         try:
             if ows_req.getValueByName("STYLES") in 'contour':
                 ows_req.setParameter("STYLES", "")
+        except TypeError:
+            print("STYLES not in the request. Nothing to reset.")
+            pass
+        try:
             map_object.OWSDispatch( ows_req )
         except Exception as e:
             raise HTTPException(status_code=500,
