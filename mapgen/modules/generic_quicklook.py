@@ -265,7 +265,7 @@ def _find_dimensions(ds, actual_variable, variable, qp):
         if dim_name in ['x', 'y', 'longitude', 'latitude']:
             continue
         for _dim_name in [f'{dim_name}', f'dim_{dim_name}']:
-            if _dim_name == 'height':
+            if _dim_name == 'height' or _dim_name == 'dim_height':
                 print(f"Can not have a dimension name height as this will conflict with query parameter HEIGHT as the size in image.")
                 _dim_name = _dim_name + '_dimension'
             print(f"search for dim_name {_dim_name} in query parameters.")
