@@ -61,7 +61,10 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, xr_dat
         try:
             map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
         except KeyError:
-            map_object.setSize(2000, 2000)
+            try:
+                map_object.setSize(xr_dataset.dims['Xc'], xr_dataset.dims['Yc'])
+            except KeyError:
+                map_object.setSize(2000, 2000)
     map_object.units = mapscript.MS_DD
     try:
         map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
@@ -107,7 +110,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'y', 'longitude', 'latitude']:
+        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
         print(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
@@ -125,7 +128,12 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
             else:
-                print("time list not implemented.")
+                print("Use time list.")
+                time_list = []
+                for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                    time_list.append(f"{str(d.data)}")
+                start_time = time_list[0]
+                layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
             layer.metadata.set("wms_default", f'{start_time}')
         else:
             if ds[dim_name].data.size > 1:
@@ -192,7 +200,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'y', 'longitude', 'latitude']:
+        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
         if dim_name in 'time':
             print("handle time")
@@ -209,7 +217,12 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
             else:
-                print("time list not implemented.")
+                print("Use time list.")
+                time_list = []
+                for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                    time_list.append(f"{str(d.data)}")
+                start_time = time_list[0]
+                layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
             layer.metadata.set("wms_default", f'{start_time}')
         else:
             if ds[dim_name].data.size > 1:
@@ -235,10 +248,16 @@ def _extract_extent(ds, variable):
         ll_y = min(ds[variable].coords['y'].data)
         ur_y = max(ds[variable].coords['y'].data)
     except KeyError:
-        ll_x = min(ds[variable].coords['longitude'].data)
-        ur_x = max(ds[variable].coords['longitude'].data)
-        ll_y = min(ds[variable].coords['latitude'].data)
-        ur_y = max(ds[variable].coords['latitude'].data)
+        try:
+            ll_x = min(ds[variable].coords['Xc'].data)
+            ur_x = max(ds[variable].coords['Xc'].data)
+            ll_y = min(ds[variable].coords['Yc'].data)
+            ur_y = max(ds[variable].coords['Yc'].data)
+        except KeyError:
+            ll_x = min(ds[variable].coords['longitude'].data)
+            ur_x = max(ds[variable].coords['longitude'].data)
+            ll_y = min(ds[variable].coords['latitude'].data)
+            ur_y = max(ds[variable].coords['latitude'].data)
 
     return ll_x,ur_x,ll_y,ur_y
 
@@ -252,6 +271,7 @@ def find_time_diff(ds, dim_name):
         if prev:
             diff = stamp - prev
             if prev_diff and diff != prev_diff:
+                # Diff between more than three stamps are different. Can not use range.
                 is_range = False
                 break
             prev_diff = diff
@@ -262,7 +282,7 @@ def _find_dimensions(ds, actual_variable, variable, qp):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'y', 'longitude', 'latitude']:
+        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
         for _dim_name in [f'{dim_name}', f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
@@ -426,19 +446,37 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     else:
         if len(dimension_search) == 1:
             print("Len 1")
-            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
-            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+            _ds = ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data
+            if '_FillValue' in ds[actual_variable].attrs:
+                print("FillValue:", ds[actual_variable].attrs)
+                _ds = np.where(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data == ds[actual_variable].attrs['_FillValue'],
+                               np.nan,
+                               ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+            #min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+            #max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
         elif len(dimension_search) == 2:
             print("Len 2 of ", actual_variable)
-            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
-            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            _ds = ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data
+            if '_FillValue' in ds[actual_variable].attrs:
+                _ds = np.where(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data == ds[actual_variable].attrs['_FillValue'],
+                               np.nan,
+                               ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            #min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            #max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
         # Find which band
         elif len(dimension_search) == 3:
             print("Len 3")
-            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
-            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+            _ds = ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data
+            if '_FillValue' in ds[actual_variable].attrs:
+                _ds = np.where(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data == ds[actual_variable].attrs['_FillValue'], 
+                               np.nan,
+                               ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+            #min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+            #max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
         else:
             print("Undefined lenght of dimension search ", len(dimension_search))
+        min_val = np.nanmin(_ds)
+        max_val = np.nanmax(_ds)
         print("MIN:MAX ", min_val, max_val)
         # print(ds[actual_variable].attrs)
         # if 'scale_factor' in ds[actual_variable].attrs:
@@ -526,11 +564,15 @@ def generic_quicklook(netcdf_path: str,
     try:
         forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
     except KeyError:
-        print("Could not find forecast time or analysis time from dataset. Try parse from filename.")
-        # Parse the netcdf filename to get start time or reference time
-        _, _forecast_time = _parse_filename(netcdf_path, product_config)
-        forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
-        print(forecast_time)
+        try:
+            print("Could not find forecast time or analysis time from dataset. Try parse from filename.")
+            # Parse the netcdf filename to get start time or reference time
+            _, _forecast_time = _parse_filename(netcdf_path, product_config)
+            forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
+            print(forecast_time)
+        except ValueError:
+            print("Could not find any forecast_reference_time. Use now.")
+            forecast_time = datetime.datetime.now()
 
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, ds_disk)
