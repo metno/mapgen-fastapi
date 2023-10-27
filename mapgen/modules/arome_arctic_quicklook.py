@@ -708,7 +708,7 @@ def arome_arctic_quicklook(netcdf_path: str,
     _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, ds_disk)
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
-    if os.path.exists(symbol_file):
+    if not os.path.exists(symbol_file):
         symbol_obj = mapscript.symbolSetObj()
         symbol = mapscript.symbolObj("horizline")
         symbol.name = "horizline"
