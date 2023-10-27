@@ -27,6 +27,11 @@ import xml.dom.minidom
 from fastapi import HTTPException
 from fastapi.responses import Response
 
+import numpy as np
+import xarray as xr
+from cartopy import crs
+import metpy # needed for xarray's metpy accessor
+
 def _read_config_file(regexp_config_file):
     regexp_config = None
     try:
@@ -118,3 +123,67 @@ def handle_request(map_object, full_request):
         dom = xml.dom.minidom.parseString(_result)
         result = dom.toprettyxml(indent="", newl="")
     return Response(result, media_type=content_type)
+
+#from typing import Optional
+#from . import _util
+#from maptor.config import ModelConfiguration
+
+
+
+def _get_speed(x_vector: xr.DataArray, y_vector: xr.DataArray, standard_name: str) -> xr.DataArray:
+    data = np.sqrt((x_vector**2) + (y_vector**2))
+    data.attrs['standard_name'] = standard_name
+    data.attrs['units'] = x_vector.attrs['units']
+    return data
+
+
+def _get_from_direction(x_vector: xr.DataArray, y_vector: xr.DataArray, standard_name: str) -> xr.DataArray:
+    data = ((np.arctan2(x_vector, y_vector) * 180 / np.pi) + 180) % 360
+    data.attrs['standard_name'] = standard_name
+    data.attrs['units'] = 'degrees'
+    return data
+
+
+def _north(projection: crs.CRS, requested_epsg, x_in: xr.DataArray, y_in: xr.DataArray) -> np.ndarray:
+    x_len = len(x_in)
+    y_len = len(y_in)
+    shape = [y_len, x_len]
+
+    x = np.tile(x_in, [y_len, 1])
+    y = np.tile(y_in, [x_len, 1]).T
+    u = np.zeros(shape)
+    v = np.ones(shape)
+
+    if requested_epsg == 4326:
+        north_u, north_v = crs.Mercator().transform_vectors(projection, x, y, u, v)
+    else:
+        north_u, north_v = crs.epsg(requested_epsg).transform_vectors(projection, x, y, u, v)
+    north = 90 - (np.arctan2(north_v, north_u) * (180 / np.pi))
+
+    return -north
+
+
+def _get_north(x_vector_param: str, ds: xr.Dataset, requested_epsg):
+    y_coord_name, x_coord_name = ds[x_vector_param].dims[-2:]
+    north = _north(
+        _get_crs(ds, x_vector_param),
+        requested_epsg,
+        ds[x_coord_name],
+        ds[y_coord_name],
+    )
+    north = xr.DataArray(
+        data=north,
+        dims=[y_coord_name, x_coord_name],
+    )
+
+    return north
+
+
+def _get_crs(ds: xr.Dataset, sample_parameter: str) -> crs.CRS:
+    ds = ds.metpy.parse_cf([sample_parameter])
+    return ds[sample_parameter].metpy.cartopy_crs
+
+
+def _rotate_relative_to_north(from_direction: xr.DataArray, north: np.ndarray):
+    from_direction -= north
+    from_direction %= 360

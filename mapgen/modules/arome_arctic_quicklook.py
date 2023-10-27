@@ -36,17 +36,23 @@ Needed entries in the config:
 """
 import os
 import re
+import glob
+#import time
+import hashlib
 import pandas
+import shutil
 import datetime
+import tempfile
 import mapscript
 from fastapi import Request, Query, HTTPException
 import numpy as np
 import xarray as xr
 from osgeo import gdal
 from pyproj import CRS
-from mapgen.modules.helpers import handle_request
+from mapgen.modules.helpers import handle_request, _get_from_direction, _get_north, _get_speed, _rotate_relative_to_north, _get_crs
 
 grid_mapping_cache = {}
+wind_rotation_cache = {}
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, xr_dataset):
     """"Add all needed web metadata to the generated map file."""
@@ -250,6 +256,18 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
                 layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
+    # Extra dimmensions to handle styling
+    extra_dimmensions = []
+    extra_dimmensions.append({'item': 'Spacing', 'units': 'pixels', 'extent': [2,4,8,12,16,24,32], 'default': 12})
+    extra_dimmensions.append({'item': 'Colour', 'units': 'na', 'extent': ['blue', 'red', 'green', 'cyan', 'magenta', 'yellow','light_green'],
+                              'default': 'light-green'})
+    for ed in extra_dimmensions:
+        dims_list.append(ed['item'])
+        layer.metadata.set(f"wms_{ed['item']}_item", ed['item'])
+        layer.metadata.set(f"wms_{ed['item']}_units", ed['units'])
+        layer.metadata.set(f"wms_{ed['item']}_extent", ','.join([str(d) for d in ed['extent']]))
+        layer.metadata.set(f"wms_{ed['item']}_default", str(ed['default']))
+
     if dims_list:
         layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
 
@@ -393,17 +411,132 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     if variable.endswith('_vector'):
-        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "xvar.vrt"),
-                    [f'NETCDF:{netcdf_file}:{actual_x_variable}'],
-                    **{'bandList': [band_number]})
-        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "yvar.vrt"),
-                    [f'NETCDF:{netcdf_file}:{actual_y_variable}'],
-                    **{'bandList': [band_number]})
-        gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "var.vrt"),
-                    [os.path.join(_get_mapfiles_path(product_config), 'xvar.vrt'),
-                     os.path.join(_get_mapfiles_path(product_config), 'yvar.vrt')],
-                    **{'separate': True})
-        layer.data = os.path.join(_get_mapfiles_path(product_config), 'var.vrt')
+        # actual_x_variable = 'x_wind_10m'
+        # actual_y_variable = 'y_wind_10m'
+
+        sel_dim = {}
+        for _ds in dimension_search:
+            sel_dim[_ds['dim_name']] = _ds['selected_band_number']
+        # ts = time.time()
+        # print("selected dimmensions:", sel_dim)
+        ds = ds.isel(**sel_dim)
+        # te = time.time()
+        # print("isel ", te -ts)
+
+        #ds = ds.sel(height7=1, method='nearest', drop=True)
+        # print(ds.dims)
+        #grid_mapping_name = ds['x_wind_10m'].attrs['grid_mapping']
+        #grid_mapping = ds[grid_mapping_name]
+
+        # ts = time.time()
+        standard_name_prefix = 'wind'
+        speed = _get_speed(
+            ds[actual_x_variable],
+            ds[actual_y_variable],
+            f'{standard_name_prefix}_speed'
+        )
+        # te = time.time()
+        # print("_get_speed ", te - ts)
+        # ts = time.time()
+        from_direction = _get_from_direction(
+            ds[actual_x_variable],
+            ds[actual_y_variable],
+            f'{standard_name_prefix}_from_direction'
+        )
+        # te = time.time()
+        # print("_from_direction ", te - ts)
+        # ts = time.time()
+
+        try:
+            print("EPSG CRS:",qp['crs'])
+            requested_epsg = int(qp['crs'].split(':')[-1])
+        except KeyError:
+            requested_epsg = 4326
+        print(requested_epsg)
+        # Rotate wind direction, so it relates to the north pole, rather than to the grid's y direction.
+        unique_dataset_string = hashlib.md5((f"{requested_epsg}"
+                                             f"{_get_crs(ds, actual_x_variable)}"
+                                             f"{ds['x'].data.size}"
+                                             f"{ds['y'].data.size}"
+                                             f"{ds['x'][0].data}"
+                                             f"{ds['x'][-1].data}"
+                                             f"{ds['y'][0].data}"
+                                             f"{ds['y'][-1].data}").encode('UTF-8')).hexdigest()
+        print("UNIQUE DS STRING", unique_dataset_string)
+        if unique_dataset_string in wind_rotation_cache:
+            north = wind_rotation_cache[unique_dataset_string]
+        else:
+            north = _get_north(actual_x_variable, ds, requested_epsg)
+            wind_rotation_cache[unique_dataset_string] = north
+        # north = _get_north(actual_x_variable, ds, requested_epsg)
+        # te = time.time()
+        # print("_get_north ", te - ts) 
+        # ts = time.time()
+        _rotate_relative_to_north(from_direction, north)
+        # te = time.time()
+        # print("_relative_to_north ", te - ts)
+        # ts = time.time()
+
+        #print("from direction", from_direction)
+        new_x = np.cos((90. - from_direction - 180) * np.pi/180) * speed
+        new_y = np.sin((90. - from_direction - 180) * np.pi/180) * speed
+        new_x.attrs['grid_mapping'] = ds[actual_x_variable].attrs['grid_mapping']
+        new_y.attrs['grid_mapping'] = ds[actual_y_variable].attrs['grid_mapping']
+        #print("Newx:", new_x)
+        ds_xy = xr.Dataset({})
+        ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']]
+        ds_xy[actual_x_variable] = new_x.drop_vars(['latitude', 'longitude'])
+        ds_xy[actual_y_variable] = new_y.drop_vars(['latitude', 'longitude'])
+        # te = time.time()
+        # print("new dataset ", te - ts)
+        # ts = time.time()
+        # print("GRid mapping", new_x.attrs['grid_mapping'])
+        #ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']].drop_vars(['time', 'height7'])
+        # print(ds_xy)
+        for netcdfs in glob.glob(os.path.join(_get_mapfiles_path(product_config), "netcdf-*")):
+            shutil.rmtree(netcdfs)
+        tmp_netcdf = os.path.join(tempfile.mkdtemp(prefix='netcdf-', dir=_get_mapfiles_path(product_config)),
+                                  f"xy-{actual_x_variable}-{actual_y_variable}.nc")
+        ds_xy.to_netcdf(tmp_netcdf)
+        for vrts in glob.glob(os.path.join(_get_mapfiles_path(product_config), "vrt-*")):
+            shutil.rmtree(vrts)
+
+        # xvar_vrt_filename = tempfile.mkstemp(suffix=".vrt",
+        #                                      prefix=f'xvar-{actual_x_variable}-1-',
+        #                                      dir=_get_mapfiles_path(product_config))
+        xvar_vrt_filename = os.path.join(tempfile.mkdtemp(prefix='vrt-', dir=_get_mapfiles_path(product_config)),
+                                         f"xvar-{actual_x_variable}-1.vrt")
+        gdal.BuildVRT(xvar_vrt_filename,
+                    [f'NETCDF:{tmp_netcdf}:{actual_x_variable}'],
+                    **{'bandList': [1]})
+        # yvar_vrt_filename = tempfile.mkstemp(suffix=".vrt",
+        #                                      prefix=f'yvar-{actual_x_variable}-1-',
+        #                                      dir=_get_mapfiles_path(product_config))
+        yvar_vrt_filename = os.path.join(tempfile.mkdtemp(prefix='vrt-', dir=_get_mapfiles_path(product_config)),
+                                         f"yvar-{actual_y_variable}-1.vrt")
+        gdal.BuildVRT(yvar_vrt_filename,
+                    [f'NETCDF:{tmp_netcdf}:{actual_y_variable}'],
+                    **{'bandList': [1]})
+        # gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "xvar.vrt"),
+        #             [f'NETCDF:{netcdf_file}:{actual_x_variable}'],
+        #             **{'bandList': [band_number]})
+        # gdal.BuildVRT(os.path.join(_get_mapfiles_path(product_config), "yvar.vrt"),
+        #             [f'NETCDF:{netcdf_file}:{actual_y_variable}'],
+        #             **{'bandList': [band_number]})
+
+        # variable_file_vrt = tempfile.mkstemp(suffix=".vrt",
+        #                                      prefix=f'var-{actual_x_variable}-{actual_y_variable}-{band_number}-',
+        #                                      dir=_get_mapfiles_path(product_config))
+        variable_file_vrt = os.path.join(tempfile.mkdtemp(prefix='vrt-', dir=_get_mapfiles_path(product_config)),
+                                         f'var-{actual_x_variable}-{actual_y_variable}-{band_number}.vrt')
+        #variable_file_vrt = f'var-{actual_x_variable}-{actual_y_variable}-{band_number}.vrt'
+        gdal.BuildVRT(variable_file_vrt,
+                      [f'NETCDF:{tmp_netcdf}:{actual_x_variable}', f'NETCDF:{tmp_netcdf}:{actual_y_variable}'],
+                     #[xvar_vrt_filename, yvar_vrt_filename],
+                     **{'bandList': [1], 'separate': True})
+        # te = time.time()
+        # print("save and create vrts ", te - ts) 
+        layer.data = variable_file_vrt
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
@@ -431,9 +564,36 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     if variable.endswith('_vector'):
         s = mapscript.classObj(layer)
         style = mapscript.styleObj(s)
-        style.updateFromString('STYLE SYMBOL "horizline" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR 100 255 0 END')
-        style.setSymbolByName(map_obj, "horizline")
-        layer.setProcessingKey('UV_SIZE_SCALE', '2')
+        # style.updateFromString('STYLE SYMBOL "horizline" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR 100 255 0 END')
+        # style.setSymbolByName(map_obj, "horizline")
+        colours_by_name = {}
+        colours_by_name['light-green'] = "100 255 0"
+        colours_by_name['blue'] = "0 0 255"
+        colours_by_name['red'] = "255 0 0"
+        colours_by_name['green'] = "0 255 0"
+        colours_by_name['cyan'] = "0 255 255"
+        colours_by_name['magenta'] = "255 0 255"
+        colours_by_name['yellow'] = "255 255 0"
+        try:
+            colour_dimension = qp['colour']
+        except KeyError:
+            try:
+                colour_dimension = qp['dim_colour']
+            except KeyError:
+                colour_dimension = 'light-green'
+
+        style.updateFromString(f'STYLE SYMBOL "vector_arrow" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR {colour_dimension} END')
+        style.setSymbolByName(map_obj, "vector_arrow")
+        #layer.setProcessingKey('UV_SIZE_SCALE', '2')
+
+        try:
+            uv_spacing = qp['spacing']
+        except KeyError:
+            try:
+                uv_spacing = qp['dim_spacing']
+            except KeyError:
+                uv_spacing = 12
+        layer.setProcessingKey('UV_SPACING', str(uv_spacing)) #Default 32
 
         # #style.autoangle = "[uv_angle]"
         # style.angle = 43
@@ -562,6 +722,25 @@ def arome_arctic_quicklook(netcdf_path: str,
 
     symbol_obj = mapscript.symbolSetObj()
     symbol_obj.appendSymbol(symbol)
+    # Create vector arrow
+    symbol_wa = mapscript.symbolObj("vector_arrow")
+    symbol_wa.name = "vector_arrow"
+    symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
+    lo = mapscript.lineObj()
+    lo.add(mapscript.pointObj(10,3))
+    lo.add(mapscript.pointObj(6,6))
+    lo.add(mapscript.pointObj(7,3.75))
+    lo.add(mapscript.pointObj(0,3.75))
+    lo.add(mapscript.pointObj(0,2.25))
+    lo.add(mapscript.pointObj(7,2.25))
+    lo.add(mapscript.pointObj(6,0))
+    lo.add(mapscript.pointObj(10,3))
+    symbol_wa.setPoints(lo)
+    symbol_wa.anchorpoint_x = 0.5
+    symbol_wa.anchorpoint_y = 1.
+    symbol_wa.filled = True
+    symbol_obj.appendSymbol(symbol_wa)
+
     symbol_obj.save(os.path.join(_get_mapfiles_path(product_config), "symbol.sym"))
     map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config),"symbol.sym"))
 
