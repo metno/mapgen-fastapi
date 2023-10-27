@@ -56,7 +56,7 @@ wind_rotation_cache = {}
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, xr_dataset):
     """"Add all needed web metadata to the generated map file."""
-    map_object.web.metadata.set("wms_title", "WMS")
+    map_object.web.metadata.set("wms_title", "WMS Arome Arctic")
     map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
@@ -259,7 +259,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     # Extra dimmensions to handle styling
     extra_dimmensions = []
     extra_dimmensions.append({'item': 'Spacing', 'units': 'pixels', 'extent': [2,4,8,12,16,24,32], 'default': 12})
-    extra_dimmensions.append({'item': 'Colour', 'units': 'na', 'extent': ['blue', 'red', 'green', 'cyan', 'magenta', 'yellow','light_green'],
+    extra_dimmensions.append({'item': 'Colour', 'units': '', 'extent': ['blue', 'red', 'green', 'cyan', 'magenta', 'yellow','light_green'],
                               'default': 'light-green'})
     for ed in extra_dimmensions:
         dims_list.append(ed['item'])
@@ -582,7 +582,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             except KeyError:
                 colour_dimension = 'light-green'
 
-        style.updateFromString(f'STYLE SYMBOL "vector_arrow" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR {colour_dimension} END')
+        style.updateFromString(f'STYLE SYMBOL "vector_arrow" ANGLE [uv_angle] SIZE [uv_length] WIDTH 3 COLOR {colours_by_name[colour_dimension]} END')
         style.setSymbolByName(map_obj, "vector_arrow")
         #layer.setProcessingKey('UV_SIZE_SCALE', '2')
 
@@ -684,9 +684,7 @@ def arome_arctic_quicklook(netcdf_path: str,
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
 
-    # Read all variables names from the netcdf file.
     ds_disk = xr.open_dataset(netcdf_path)
-    variables = list(ds_disk.keys())
 
     #get forecast reference time from dataset
     try:
@@ -709,40 +707,42 @@ def arome_arctic_quicklook(netcdf_path: str,
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, ds_disk)
 
-    symbol = mapscript.symbolObj("horizline")
-    symbol.name = "horizline"
-    symbol.type = mapscript.MS_SYMBOL_VECTOR
-    po = mapscript.pointObj()
-    po.setXY(0, 0)
-    lo = mapscript.lineObj()
-    lo.add(po)
-    po.setXY(1, 0)
-    lo.add(po)
-    symbol.setPoints(lo)
+    symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
+    if os.path.exists(symbol_file):
+        symbol_obj = mapscript.symbolSetObj()
+        symbol = mapscript.symbolObj("horizline")
+        symbol.name = "horizline"
+        symbol.type = mapscript.MS_SYMBOL_VECTOR
+        po = mapscript.pointObj()
+        po.setXY(0, 0)
+        lo = mapscript.lineObj()
+        lo.add(po)
+        po.setXY(1, 0)
+        lo.add(po)
+        symbol.setPoints(lo)
+        symbol_obj.appendSymbol(symbol)
 
-    symbol_obj = mapscript.symbolSetObj()
-    symbol_obj.appendSymbol(symbol)
-    # Create vector arrow
-    symbol_wa = mapscript.symbolObj("vector_arrow")
-    symbol_wa.name = "vector_arrow"
-    symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-    lo = mapscript.lineObj()
-    lo.add(mapscript.pointObj(10,3))
-    lo.add(mapscript.pointObj(6,6))
-    lo.add(mapscript.pointObj(7,3.75))
-    lo.add(mapscript.pointObj(0,3.75))
-    lo.add(mapscript.pointObj(0,2.25))
-    lo.add(mapscript.pointObj(7,2.25))
-    lo.add(mapscript.pointObj(6,0))
-    lo.add(mapscript.pointObj(10,3))
-    symbol_wa.setPoints(lo)
-    symbol_wa.anchorpoint_x = 0.5
-    symbol_wa.anchorpoint_y = 1.
-    symbol_wa.filled = True
-    symbol_obj.appendSymbol(symbol_wa)
+        # Create vector arrow
+        symbol_wa = mapscript.symbolObj("vector_arrow")
+        symbol_wa.name = "vector_arrow"
+        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
+        lo = mapscript.lineObj()
+        lo.add(mapscript.pointObj(10,3))
+        lo.add(mapscript.pointObj(6,6))
+        lo.add(mapscript.pointObj(7,3.75))
+        lo.add(mapscript.pointObj(0,3.75))
+        lo.add(mapscript.pointObj(0,2.25))
+        lo.add(mapscript.pointObj(7,2.25))
+        lo.add(mapscript.pointObj(6,0))
+        lo.add(mapscript.pointObj(10,3))
+        symbol_wa.setPoints(lo)
+        symbol_wa.anchorpoint_x = 1.
+        symbol_wa.anchorpoint_y = 0.5
+        symbol_wa.filled = True
+        symbol_obj.appendSymbol(symbol_wa)
 
-    symbol_obj.save(os.path.join(_get_mapfiles_path(product_config), "symbol.sym"))
-    map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config),"symbol.sym"))
+        symbol_obj.save(symbol_file)
+    map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config), symbol_file))
 
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
     print(qp)
@@ -751,16 +751,12 @@ def arome_arctic_quicklook(netcdf_path: str,
         if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config):
             layer_no = map_object.insertLayer(layer)
     else:
+        # Read all variables names from the netcdf file.
+        variables = list(ds_disk.keys())
         for variable in variables:
             layer = mapscript.layerObj()
             if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                 layer_no = map_object.insertLayer(layer)
-            # if variable == 'air_pressure_at_sea_level':
-            #     layer_contour = mapscript.layerObj()
-            #     if _generate_getcapabilities_contour(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
-            #         print("Insert layer")
-            #         layer_no = map_object.insertLayer(layer_contour)
-            #         print("Inserted layer")
             if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                 print(f"Add wind vector layer for {variable}.")
                 layer_contour = mapscript.layerObj()
