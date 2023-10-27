@@ -259,7 +259,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     # Extra dimmensions to handle styling
     extra_dimmensions = []
     extra_dimmensions.append({'item': 'Spacing', 'units': 'pixels', 'extent': [2,4,8,12,16,24,32], 'default': 12})
-    extra_dimmensions.append({'item': 'Colour', 'units': '', 'extent': ['blue', 'red', 'green', 'cyan', 'magenta', 'yellow','light_green'],
+    extra_dimmensions.append({'item': 'Colour', 'units': '', 'extent': ['blue', 'red', 'green', 'cyan', 'magenta', 'yellow','light-green'],
                               'default': 'light-green'})
     for ed in extra_dimmensions:
         dims_list.append(ed['item'])
