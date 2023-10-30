@@ -428,7 +428,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         style = qp['style']
     if variable.endswith("_vector") and style == "":
         print("Empty style. Force wind barbs.")
-        style = "wind_barbs"
+        style = "Wind_barbs"
     elif style == "":
         print("Empty style. Force raster.")
         style = 'raster'
@@ -624,7 +624,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             except KeyError:
                 colour_dimension = 'light-green'
 
-        if style == "wind_barbs":
+        if style.lower() == "wind_barbs":
             # Wind barbs
             layer.classitem = "uv_length"
             s = mapscript.classObj(layer)
@@ -638,7 +638,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                 min_wind_barb_speed = max_wind_barb_speed - 5
                 _add_wind_barb(map_obj, layer, colours_by_name[colour_dimension], min_wind_barb_speed, max_wind_barb_speed)
 
-        elif style == "vector":
+        elif style.lower() == "vector":
             # Vectors
             s = mapscript.classObj(layer)
             _style = mapscript.styleObj(s)
