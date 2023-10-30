@@ -97,11 +97,12 @@ def handle_request(map_object, full_request):
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
         mapscript.msIO_installStdoutToBuffer()
         try:
-            if ows_req.getValueByName("STYLES") in 'contour':
+            _styles = str(ows_req.getValueByName("STYLES"))
+            if _styles.lower() in 'contour':
                 ows_req.setParameter("STYLES", "")
-            if ows_req.getValueByName("STYLES") in 'wind_barbs':
+            if _styles.lower() in 'wind_barbs':
                 ows_req.setParameter("STYLES", "")
-            if ows_req.getValueByName("STYLES") in 'vector':
+            if _styles.lower() in 'vector':
                 ows_req.setParameter("STYLES", "")
         except TypeError:
             print("STYLES not in the request. Nothing to reset.")
