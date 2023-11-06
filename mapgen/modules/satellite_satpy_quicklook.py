@@ -226,18 +226,22 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     print("Need to generate: ", satpy_products)
     print(datetime.now(), "Before Scene")
     swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
-    print(datetime.now(), "Before load")
+    print(datetime.now(), "Before load, resolution:", resolution)
     swath_scene.load(satpy_products, resolution=resolution)
     print("Available composites names:", swath_scene.available_composite_names())
     proj_dict = {'proj': 'omerc',
                  'ellps': 'WGS84'}
 
     print(datetime.now(), "Before compute optimal bb area")
-    bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict)
-    print(bb_area)
-    print(bb_area.pixel_size_x)
-    print(bb_area.pixel_size_y)
-    
+    try:
+        bb_area = swath_scene.coarsest_area().compute_optimal_bb_area(proj_dict=proj_dict)
+        print(bb_area)
+        print(bb_area.pixel_size_x)
+        print(bb_area.pixel_size_y)
+    except KeyError:
+        # Need a backup overview area if bb_area doesn't work
+        print("Can not compute bb area. Use euro4 as backup.")
+        bb_area = 'euro4'
     print(datetime.now(), "Before resample")
     resample_scene = swath_scene.resample(bb_area)
     print(datetime.now(), "Before save")
