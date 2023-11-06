@@ -66,6 +66,7 @@ def generate_satpy_quicklook(netcdf_path: str,
     print("Request url scheme:", full_request.url.scheme)
     print("Request url netloc:", full_request.url.netloc)
     netcdf_path = netcdf_path.replace("//", "/")
+    orig_netcdf_path = netcdf_path
     try:
         if netcdf_path.startswith(product_config['base_netcdf_directory']):
             print("Request with full path. Please fix your request. Depricated from version 2.0.0.")
@@ -110,7 +111,7 @@ def generate_satpy_quicklook(netcdf_path: str,
             raise HTTPException(status_code=500, detail=f"Layer can not be made for this dataset {str(ke)}")
 
     map_object = mapscript.mapObj()
-    _fill_metadata_to_mapfile(netcdf_path, map_object, full_request)
+    _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request)
 
     for satpy_product in satpy_products_to_generate:
         layer = mapscript.layerObj()
@@ -151,10 +152,10 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     dataset.close()
     print("Complete generate layer")
 
-def _fill_metadata_to_mapfile(netcdf_path, map_object, full_request):
+def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request):
     """"Add all needed web metadata to the generated map file."""
     map_object.web.metadata.set("wms_title", "WMS senda fastapi")
-    map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook/{netcdf_path}")
+    map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
