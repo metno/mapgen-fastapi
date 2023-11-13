@@ -111,6 +111,12 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
                     diff_string = "PT1H"
                 elif diff == datetime.timedelta(hours=3):
                     diff_string = "PT3H"
+                elif diff == datetime.timedelta(hours=6):
+                    diff_string = "PT6H"
+                elif diff == datetime.timedelta(hours=12):
+                    diff_string = "PT12H"
+                elif diff == datetime.timedelta(hours=24):
+                    diff_string = "PT24H"
                 else:
                     print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
@@ -124,7 +130,10 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
                 #print(f"add dimension {dim_name} for variable {variable}.")
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
-                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                try:
+                    layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                except KeyError:
+                    layer.metadata.set(f"wms_{dim_name}_units", '1')
                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
             # else:
@@ -153,59 +162,6 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
     #style.minvalue = float(min_val)
     #style.maxvalue = float(max_val)
-
-    return True
-
-def _generate_getcapabilities_contour(layer, ds, variable, grid_mapping_cache, netcdf_file):
-    """Generate getcapabilities for the netcdf file."""
-    print("ADDING contour")
-    grid_mapping_name = _find_projection(ds, variable)
-    if not grid_mapping_name:
-        return None
-    layer.setProjection(grid_mapping_cache[grid_mapping_name])
-    layer.status = 1
-    layer.data = f'NETCDF:{netcdf_file}:{variable}'
-    layer.type = mapscript.MS_LAYER_LINE
-    layer.name = f'{variable}_contour'
-    layer.metadata.set("wms_title", f'{variable}_contour')
-    layer.setConnectionType(mapscript.MS_CONTOUR, "")
-    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
-    layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
-    dims_list = []
-    for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'y']:
-            continue
-        if dim_name in 'time':
-            print("handle time")
-            diff, is_range = find_time_diff(ds, dim_name)
-            if is_range:
-                diff_string = 'PT1H'
-                if diff == datetime.timedelta(hours=1):
-                    diff_string = "PT1H"
-                elif diff == datetime.timedelta(hours=3):
-                    diff_string = "PT3H"
-                else:
-                    print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
-                start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
-            else:
-                print("time list not implemented.")
-            layer.metadata.set("wms_default", f'{start_time}')
-        else:
-            if ds[dim_name].data.size > 1:
-                #print(f"add dimension {dim_name} for variable {variable}.")
-                dims_list.append(dim_name)
-                layer.metadata.set(f"wms_{dim_name}_item", dim_name)
-                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
-                layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
-                layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
-            # else:
-            #     print(f"Skipping dimension {dim_name} due to one size dimmension.")
-    if dims_list:
-        layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
-
-    print("ADDing contour at end")
 
     return True
 
@@ -241,6 +197,12 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
                     diff_string = "PT1H"
                 elif diff == datetime.timedelta(hours=3):
                     diff_string = "PT3H"
+                elif diff == datetime.timedelta(hours=6):
+                    diff_string = "PT6H"
+                elif diff == datetime.timedelta(hours=12):
+                    diff_string = "PT12H"
+                elif diff == datetime.timedelta(hours=24):
+                    diff_string = "PT24H"
                 else:
                     print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
@@ -253,7 +215,10 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             if ds[dim_name].data.size > 1:
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
-                layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                try:
+                    layer.metadata.set(f"wms_{dim_name}_units", ds[dim_name].attrs['units'])
+                except KeyError:
+                    layer.metadata.set(f"wms_{dim_name}_units", '1')
                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
     # Extra dimmensions to handle styling
@@ -588,9 +553,31 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         print("Style in contour for config")
         layer.type = mapscript.MS_LAYER_LINE
         layer.setConnectionType(mapscript.MS_CONTOUR, "")
-        layer.setProcessingKey('CONTOUR_INTERVAL', f'{500}')
+        interval = 1000
+        smoothsia = 1.
+        try:
+            if ds[actual_variable].attrs['units'] == 'Pa':
+                interval = 500
+                smoothsia = 0.25
+            elif ds[actual_variable].attrs['units'] == 'K':
+                interval = 2
+                smoothsia = 0.25
+            elif ds[actual_variable].attrs['units'] == '1' and 'relative_humidity' in actual_variable:
+                interval = 0.1
+                smoothsia = 0.25
+            elif ds[actual_variable].attrs['units'] == '%':
+                interval = 10
+                smoothsia = 0.25
+            elif ds[actual_variable].attrs['units'] == 'm/s':
+                interval = 2.5
+                smoothsia = 0.25
+            else:
+                print(f"Unknown unit: {ds[actual_variable].attrs['units']}. contour interval may be of for {actual_variable}.")
+        except KeyError:
+            pass
+        layer.setProcessingKey('CONTOUR_INTERVAL', f'{interval}')
         layer.setProcessingKey('CONTOUR_ITEM', 'contour')
-        layer.setGeomTransform('smoothsia(generalize([shape], 0.25*[data_cellsize]))')
+        layer.setGeomTransform(f'smoothsia(generalize([shape], {smoothsia}*[data_cellsize]))')
     elif variable.endswith('_vector'):
         layer.setConnectionType(mapscript.MS_UVRASTER, "")
         layer.type = mapscript.MS_LAYER_POINT
@@ -689,8 +676,26 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             _style.width = 1
             _style.color = mapscript.colorObj(red=0, green=0, blue=255)
             label = mapscript.labelObj()
-            label.setText('(tostring(([contour]/100),"%.0f"))')
-            #label.setText("(tostring(([contour]/100),'%.0f'))")
+            label_scaling = 1
+            label_offset = 0
+            try:
+                if ds[actual_variable].attrs['units'] == 'Pa':
+                    label_scaling = 100
+                elif ds[actual_variable].attrs['units'] == 'K':
+                    label_scaling = 1
+                    label_offset = -273.15
+                elif ds[actual_variable].attrs['units'] == '1' and 'relative_humidity' in actual_variable:
+                    label_scaling = 0.01
+                elif ds[actual_variable].attrs['units'] == '%':
+                    label_scaling = 1
+                elif ds[actual_variable].attrs['units'] == 'm/s':
+                    label_scaling = 1
+                else:
+                    print(f"Unknown unit: {ds[actual_variable].attrs['units']}. Label scaling may be of for {actual_variable}.")
+                print(f"Selected label scale {label_scaling} and offset {label_offset}")
+            except KeyError:
+                pass
+            label.setText(f'(tostring(({label_offset}+[contour]/{label_scaling}),"%.0f"))')
             print(label.convertToString())
             label.color = mapscript.colorObj(red=0, green=0, blue=255)
             #label.font = 'sans'
@@ -745,6 +750,8 @@ def arome_arctic_quicklook(netcdf_path: str,
 
     if not netcdf_path:
         raise HTTPException(status_code=404, detail="Missing netcdf path")
+    if not os.path.exists(netcdf_path):
+        raise HTTPException(status_code=404, detail=f"Could not find {orig_netcdf_path} in server configured directory.")
 
     ds_disk = xr.open_dataset(netcdf_path)
 
