@@ -37,7 +37,7 @@ Needed entries in the config:
 import os
 import re
 #import glob
-#import time
+import time
 import hashlib
 import pandas
 #import shutil
@@ -51,6 +51,7 @@ import xarray as xr
 from osgeo import gdal
 from pyproj import CRS
 from lxml import etree
+from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _get_from_direction, _get_north, _get_speed, _rotate_relative_to_north, _get_crs
 
 grid_mapping_cache = {}
@@ -852,529 +853,44 @@ def arome_arctic_quicklook(netcdf_path: str,
     #   Other dimensions
     # Add this to some data structure.
     # Pass this data structure to mapscript to create an in memory config for mapserver/mapscript
-    map_object = mapscript.mapObj()
-    _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk)
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
-    if not os.path.exists(symbol_file):
-        symbol_obj = mapscript.symbolSetObj()
-        symbol = mapscript.symbolObj("horizline")
-        symbol.name = "horizline"
-        symbol.type = mapscript.MS_SYMBOL_VECTOR
-        po = mapscript.pointObj()
-        po.setXY(0, 0)
-        lo = mapscript.lineObj()
-        lo.add(po)
-        po.setXY(1, 0)
-        lo.add(po)
-        symbol.setPoints(lo)
-        symbol_obj.appendSymbol(symbol)
-
-        # Create vector arrow
-        symbol_wa = mapscript.symbolObj("vector_arrow")
-        symbol_wa.name = "vector_arrow"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(10,3))
-        lo.add(mapscript.pointObj(6,6))
-        lo.add(mapscript.pointObj(7,3.75))
-        lo.add(mapscript.pointObj(0,3.75))
-        lo.add(mapscript.pointObj(0,2.25))
-        lo.add(mapscript.pointObj(7,2.25))
-        lo.add(mapscript.pointObj(6,0))
-        lo.add(mapscript.pointObj(10,3))
-        symbol_wa.setPoints(lo)
-        symbol_wa.anchorpoint_x = 1.
-        symbol_wa.anchorpoint_y = 0.5
-        symbol_wa.filled = True
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # # Create wind barb 5 kn
-        # symbol_wa = mapscript.symbolObj("wind_barb_5")
-        # symbol_wa.name = "wind_barb_5"
-        # symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        # lo = mapscript.lineObj()
-        # lo.add(mapscript.pointObj(2,8.2))
-        # lo.add(mapscript.pointObj(26,8.2))
-        # lo.add(mapscript.pointObj(-99,-99))
-        # lo.add(mapscript.pointObj(4,8.2))
-        # lo.add(mapscript.pointObj(3,3.5))
-        # symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        # symbol_wa.filled = False
-        # symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 0 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_0")
-        symbol_wa.name = "wind_barb_0"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 5 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_5")
-        symbol_wa.name = "wind_barb_5"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(3,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-
-        # Create wind barb 10 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_10")
-        symbol_wa.name = "wind_barb_10"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-
-        # Create wind barb 15 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_15")
-        symbol_wa.name = "wind_barb_15"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(3,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 20 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_20")
-        symbol_wa.name = "wind_barb_20"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 25 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_25")
-        symbol_wa.name = "wind_barb_25"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(6,8.2))
-        lo.add(mapscript.pointObj(5,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 30 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_30")
-        symbol_wa.name = "wind_barb_30"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(6,8.2))
-        lo.add(mapscript.pointObj(4.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 35 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_35")
-        symbol_wa.name = "wind_barb_35"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(6,8.2))
-        lo.add(mapscript.pointObj(4.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(7,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 40 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_40")
-        symbol_wa.name = "wind_barb_40"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(6,8.2))
-        lo.add(mapscript.pointObj(4.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 45 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_45")
-        symbol_wa.name = "wind_barb_45"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(0.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(4,8.2))
-        lo.add(mapscript.pointObj(2.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(6,8.2))
-        lo.add(mapscript.pointObj(4.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(9,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 50 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_50")
-        symbol_wa.name = "wind_barb_50"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 50 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_50_flag")
-        symbol_wa.name = "wind_barb_50_flag"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        #lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(4.4,0))
-        lo.add(mapscript.pointObj(6.8,8.2))
-        lo.add(mapscript.pointObj(2,8.2)) # Join start
-        #lo.add(mapscript.pointObj(26,8.2)) # Join start
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = True
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 55 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_55")
-        symbol_wa.name = "wind_barb_55"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(7,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 60 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_60")
-        symbol_wa.name = "wind_barb_60"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-
-
-
-        # Create wind barb 65 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_65")
-        symbol_wa.name = "wind_barb_65"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(9,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 70 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_70")
-        symbol_wa.name = "wind_barb_70"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 75 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_75")
-        symbol_wa.name = "wind_barb_75"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(12,8.2))
-        lo.add(mapscript.pointObj(11,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 80 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_80")
-        symbol_wa.name = "wind_barb_80"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(12,8.2))
-        lo.add(mapscript.pointObj(10.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 85 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_85")
-        symbol_wa.name = "wind_barb_85"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(12,8.2))
-        lo.add(mapscript.pointObj(10.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(14,8.2))
-        lo.add(mapscript.pointObj(13,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 90 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_90")
-        symbol_wa.name = "wind_barb_90"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(12,8.2))
-        lo.add(mapscript.pointObj(10.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(14,8.2))
-        lo.add(mapscript.pointObj(12.3,0))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 95 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_95")
-        symbol_wa.name = "wind_barb_95"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(8,8.2))
-        lo.add(mapscript.pointObj(6.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(10,8.2))
-        lo.add(mapscript.pointObj(8.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(12,8.2))
-        lo.add(mapscript.pointObj(10.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(14,8.2))
-        lo.add(mapscript.pointObj(12.3,0))
-        lo.add(mapscript.pointObj(-99,-99))
-        lo.add(mapscript.pointObj(16,8.2))
-        lo.add(mapscript.pointObj(15,3.5))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-        # Create wind barb 100 kn
-        symbol_wa = mapscript.symbolObj("wind_barb_100")
-        symbol_wa.name = "wind_barb_100"
-        symbol_wa.type = mapscript.MS_SYMBOL_VECTOR
-        lo = mapscript.lineObj()
-        lo.add(mapscript.pointObj(2,8.2))
-        lo.add(mapscript.pointObj(26,8.2))
-        symbol_wa.setPoints(lo)
-        # symbol_wa.anchorpoint_x = 1.
-        # symbol_wa.anchorpoint_y = 1.
-        symbol_wa.filled = False
-        symbol_obj.appendSymbol(symbol_wa)
-
-
-
-        symbol_obj.save(symbol_file)
-    map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config), symbol_file))
-
+    create_symbol_file(symbol_file)
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
-    print(qp)
+    print("QP:", qp)
+
+    map_object = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
+        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
+        map_object = mapscript.mapObj()
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk)
+        map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
         if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config):
             layer_no = map_object.insertLayer(layer)
     else:
-        # Read all variables names from the netcdf file.
-        variables = list(ds_disk.keys())
-        for variable in variables:
-            layer = mapscript.layerObj()
-            if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
-                layer_no = map_object.insertLayer(layer)
-            if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
-                print(f"Add wind vector layer for {variable}.")
-                layer_contour = mapscript.layerObj()
-                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
-                    layer_no = map_object.insertLayer(layer_contour)
+        # Assume getcapabilities
+        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
+        if os.path.exists(mapserver_map_file):
+            print(f"Reuse existing getcapabilities map file {mapserver_map_file}")
+            map_object = mapscript.mapObj(mapserver_map_file)
+        else:
+            map_object = mapscript.mapObj()
+            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk)
+            map_object.setSymbolSet(symbol_file)
+            # Read all variables names from the netcdf file.
+            variables = list(ds_disk.keys())
+            for variable in variables:
+                layer = mapscript.layerObj()
+                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                    layer_no = map_object.insertLayer(layer)
+                if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
+                    print(f"Add wind vector layer for {variable}.")
+                    layer_contour = mapscript.layerObj()
+                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                        layer_no = map_object.insertLayer(layer_contour)
 
-    map_object.save(os.path.join(tempfile.mkdtemp(prefix='map-', dir=_get_mapfiles_path(product_config)), f'arome-arctic-{forecast_time:%Y%m%d%H%M%S}.map'))
+    map_object.save(mapserver_map_file)
 
     # Handle the request and return results.
     return handle_request(map_object, full_request)
