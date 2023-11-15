@@ -36,11 +36,12 @@ Needed entries in the config:
 """
 import os
 import re
-import glob
+#import glob
 #import time
 import hashlib
 import pandas
-import shutil
+#import shutil
+import requests
 import datetime
 import tempfile
 import mapscript
@@ -49,13 +50,53 @@ import numpy as np
 import xarray as xr
 from osgeo import gdal
 from pyproj import CRS
+from lxml import etree
 from mapgen.modules.helpers import handle_request, _get_from_direction, _get_north, _get_speed, _rotate_relative_to_north, _get_crs
 
 grid_mapping_cache = {}
 wind_rotation_cache = {}
+summary_cache = {}
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, xr_dataset):
+def _find_summary_from_csw(search_fname, forecast_time, full_request):
+    summary_text = None
+    search_string = ""
+    if 'arome_arctic' in search_fname:
+        search_string += "Arome-Arctic_"
+    if '2_5km' in search_fname:
+        search_string += "2.5km_"
+    if 'det' in search_fname:
+        search_string += "deterministic_"
+    search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    print("CSW Search string", search_string)
+    netloc = full_request.url.netloc
+    if 's-enda' in netloc:
+        netloc = netloc.replace("fastapi", "csw")
+    else:
+        netloc = 'csw.s-enda-dev.k8s.met.no'
+    url = (f'{full_request.url.scheme}://{netloc}/?'
+            'mode=opensearch&service=CSW&version=2.0.2&request=GetRecords&elementsetname=full&'
+           f'typenames=csw:Record&resulttype=results&q={search_string}')
+    try:
+        xml_string = requests.get(url, timeout=10).text
+    except requests.exceptions.Timeout:
+        print("csw request timed out. Skip summary")
+        return summary_text
+    root = etree.fromstring(xml_string.encode('utf-8'))
+    summarys = root.xpath('.//atom:summary', namespaces=root.nsmap)
+    for summary in summarys:
+        summary_text = summary.text
+        break
+    return summary_text
+
+def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, xr_dataset):
     """"Add all needed web metadata to the generated map file."""
+    bn = os.path.basename(orig_netcdf_path)
+    if bn not in summary_cache:
+        summary = _find_summary_from_csw(bn, forecast_time, full_request)
+        if summary:
+            summary_cache[bn] = summary
+            print(summary_cache[bn])
+    map_object.web.metadata.set("wms_abstract", summary_cache[bn])
     map_object.web.metadata.set("wms_title", "WMS Arome Arctic")
     map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
@@ -812,7 +853,7 @@ def arome_arctic_quicklook(netcdf_path: str,
     # Add this to some data structure.
     # Pass this data structure to mapscript to create an in memory config for mapserver/mapscript
     map_object = mapscript.mapObj()
-    _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request, ds_disk)
+    _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk)
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     if not os.path.exists(symbol_file):

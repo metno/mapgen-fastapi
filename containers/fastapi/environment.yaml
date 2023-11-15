@@ -32,3 +32,4 @@ dependencies:
 - gdal
 - cartopy
 - metpy
+- lxml
