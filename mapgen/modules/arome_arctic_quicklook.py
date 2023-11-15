@@ -695,10 +695,10 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             _style.updateFromString(f'STYLE SYMBOL "wind_barb_0" ANGLE [uv_angle] SIZE 20 WIDTH 1 COLOR {colours_by_name[colour_dimension]} OUTLINECOLOR {colours_by_name[colour_dimension]} END')
             _style.setSymbolByName(map_obj, f"wind_barb_0")
 
-            for max_wind_barb_speed in range(8,58,5):
+            for max_wind_barb_speed in range(8,53,5):
                 min_wind_barb_speed = max_wind_barb_speed - 5
                 _add_wind_barb(map_obj, layer, colours_by_name[colour_dimension], min_wind_barb_speed, max_wind_barb_speed)
-            for max_wind_barb_speed in range(58,103,5):
+            for max_wind_barb_speed in range(53,103,5):
                 min_wind_barb_speed = max_wind_barb_speed - 5
                 _add_wind_barb_50_100(map_obj, layer, colours_by_name[colour_dimension], min_wind_barb_speed, max_wind_barb_speed)
             for max_wind_barb_speed in range(103,108,5):
