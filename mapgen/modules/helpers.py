@@ -207,33 +207,36 @@ def _rotate_relative_to_north(from_direction: xr.DataArray, north: np.ndarray):
 
 def _find_summary_from_csw(search_fname, forecast_time, full_request):
     summary_text = None
-    search_string = ""
+    search_string = None
     if 'arome_arctic' in search_fname:
         search_string += "Arome-Arctic_"
     if '2_5km' in search_fname:
         search_string += "2.5km_"
     if 'det' in search_fname:
         search_string += "deterministic_"
-    search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-    print("CSW Search string", search_string)
-    netloc = full_request.url.netloc
-    if 's-enda' in netloc:
-        netloc = netloc.replace("fastapi", "csw")
+    if search_string is not None:
+        search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+        print("CSW Search string", search_string)
+        netloc = full_request.url.netloc
+        if 's-enda' in netloc:
+            netloc = netloc.replace("fastapi", "csw")
+        else:
+            netloc = 'csw.s-enda-dev.k8s.met.no'
+        url = (f'{full_request.url.scheme}://{netloc}/?'
+                'mode=opensearch&service=CSW&version=2.0.2&request=GetRecords&elementsetname=full&'
+            f'typenames=csw:Record&resulttype=results&q={search_string}')
+        try:
+            xml_string = requests.get(url, timeout=10).text
+        except requests.exceptions.Timeout:
+            print("csw request timed out. Skip summary")
+            return summary_text
+        root = etree.fromstring(xml_string.encode('utf-8'))
+        summarys = root.xpath('.//atom:summary', namespaces=root.nsmap)
+        for summary in summarys:
+            summary_text = summary.text
+            break
     else:
-        netloc = 'csw.s-enda-dev.k8s.met.no'
-    url = (f'{full_request.url.scheme}://{netloc}/?'
-            'mode=opensearch&service=CSW&version=2.0.2&request=GetRecords&elementsetname=full&'
-           f'typenames=csw:Record&resulttype=results&q={search_string}')
-    try:
-        xml_string = requests.get(url, timeout=10).text
-    except requests.exceptions.Timeout:
-        print("csw request timed out. Skip summary")
-        return summary_text
-    root = etree.fromstring(xml_string.encode('utf-8'))
-    summarys = root.xpath('.//atom:summary', namespaces=root.nsmap)
-    for summary in summarys:
-        summary_text = summary.text
-        break
+        print("Not enough data to build CSW search_string for summary. Please add if applicable.")
     return summary_text
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, xr_dataset, summary_cache, wms_title):
