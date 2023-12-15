@@ -207,14 +207,14 @@ def _rotate_relative_to_north(from_direction: xr.DataArray, north: np.ndarray):
 
 def _find_summary_from_csw(search_fname, forecast_time, full_request):
     summary_text = None
-    search_string = None
+    search_string = ""
     if 'arome_arctic' in search_fname:
         search_string += "Arome-Arctic_"
     if '2_5km' in search_fname:
         search_string += "2.5km_"
     if 'det' in search_fname:
         search_string += "deterministic_"
-    if search_string is not None:
+    if search_string != "":
         search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
         print("CSW Search string", search_string)
         netloc = full_request.url.netloc
