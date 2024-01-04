@@ -156,7 +156,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request):
     """"Add all needed web metadata to the generated map file."""
     map_object.web.metadata.set("wms_title", "WMS senda fastapi")
     map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
+    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
     map_object.setSize(10000, 10000)

@@ -251,7 +251,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:25833 EPSG:3978 EPSG:4326 EPSG:4269 EPSG:3857 EPSG:32661")
+    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
     try:
