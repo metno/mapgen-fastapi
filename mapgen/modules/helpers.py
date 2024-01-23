@@ -319,16 +319,20 @@ def find_time_diff(ds, dim_name):
     prev_diff = None
     is_range = True
     diff_string = None
-    for y,m,d,h,minute,s in zip(ds[dim_name].dt.year.data, ds[dim_name].dt.month.data, ds[dim_name].dt.day.data, ds[dim_name].dt.hour.data, ds[dim_name].dt.minute.data, ds[dim_name].dt.second.data):
-        stamp = datetime.datetime(y, m, d, h, minute, s)
-        if prev:
-            diff = stamp - prev
-            if prev_diff and diff != prev_diff:
-                # Diff between more than three stamps are different. Can not use range.
-                is_range = False
-                break
-            prev_diff = diff
-        prev = stamp
+    if len(ds[dim_name].dt.year.data) == 1:
+        print("Time diff len", len(ds[dim_name].dt.year.data))
+        is_range = False
+    else:
+        for y,m,d,h,minute,s in zip(ds[dim_name].dt.year.data, ds[dim_name].dt.month.data, ds[dim_name].dt.day.data, ds[dim_name].dt.hour.data, ds[dim_name].dt.minute.data, ds[dim_name].dt.second.data):
+            stamp = datetime.datetime(y, m, d, h, minute, s)
+            if prev:
+                diff = stamp - prev
+                if prev_diff and diff != prev_diff:
+                    # Diff between more than three stamps are different. Can not use range.
+                    is_range = False
+                    break
+                prev_diff = diff
+            prev = stamp
     if is_range:
         if diff < datetime.timedelta(hours=1):
             h = int(diff.seconds/60)
