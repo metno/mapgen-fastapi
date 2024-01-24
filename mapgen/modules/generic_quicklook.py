@@ -264,12 +264,29 @@ def generic_quicklook(netcdf_path: str,
         raise HTTPException(status_code=404, detail="Missing netcdf path")
 
     # Read all variables names from the netcdf file.
-    ds_disk = xr.open_dataset(netcdf_path, mask_and_scale=False)
+    is_ncml = False
+    try:
+        ds_disk = xr.open_dataset(netcdf_path, mask_and_scale=False)
+    except ValueError:
+        try:
+            import xncml
+            ds_disk = xncml.open_ncml(netcdf_path)
+            is_ncml = True
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Can not open file. Either not existing or ncml file: {e}")
+
     # variables = list(ds_disk.keys())
 
     #get forecast reference time from dataset
     try:
-        forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
+        if is_ncml:
+            if len(ds_disk['forecast_reference_time'].data) > 1:
+                if ds_disk['forecast_reference_time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
+                    forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
+                else:
+                    raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
+        else:
+            forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
     except KeyError:
         try:
             print("Could not find forecast time or analysis time from dataset. Try parse from filename.")

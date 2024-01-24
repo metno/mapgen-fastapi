@@ -38,6 +38,7 @@ import numpy as np
 import xarray as xr
 from cartopy import crs
 import metpy # needed for xarray's metpy accessor
+import pandas as pd
 
 def _read_config_file(regexp_config_file):
     regexp_config = None
@@ -319,6 +320,15 @@ def find_time_diff(ds, dim_name):
     prev_diff = None
     is_range = True
     diff_string = None
+    try:
+        print(ds[dim_name].dt)
+    except TypeError:
+        if ds[dim_name].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
+            ds[dim_name] = pd.TimedeltaIndex(ds[dim_name], unit='s') + datetime.datetime(1970, 1, 1)
+            ds[dim_name] = pd.to_datetime(ds[dim_name])
+        else:
+            print(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
+            raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds[dim_name].attrs['units']}")
     if len(ds[dim_name].dt.year.data) == 1:
         print("Time diff len", len(ds[dim_name].dt.year.data))
         is_range = False
