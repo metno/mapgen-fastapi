@@ -285,6 +285,16 @@ def generic_quicklook(netcdf_path: str,
                     forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
                 else:
                     raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
+            try:
+                print(ds_disk['time'].dt)
+            except TypeError:
+                if ds_disk['time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
+                    ds_disk['time'] = pandas.TimedeltaIndex(ds_disk['time'], unit='s') + datetime.datetime(1970, 1, 1)
+                    ds_disk['time'] = pandas.to_datetime(ds_disk['time'])
+                else:
+                    print(f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
+                    raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
+
         else:
             forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
     except KeyError:

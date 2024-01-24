@@ -320,15 +320,15 @@ def find_time_diff(ds, dim_name):
     prev_diff = None
     is_range = True
     diff_string = None
-    try:
-        print(ds[dim_name].dt)
-    except TypeError:
-        if ds[dim_name].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
-            ds[dim_name] = pd.TimedeltaIndex(ds[dim_name], unit='s') + datetime.datetime(1970, 1, 1)
-            ds[dim_name] = pd.to_datetime(ds[dim_name])
-        else:
-            print(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
-            raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds[dim_name].attrs['units']}")
+    # try:
+    #     print(ds[dim_name].dt)
+    # except TypeError:
+    #     if ds[dim_name].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
+    #         ds[dim_name] = pd.TimedeltaIndex(ds[dim_name], unit='s') + datetime.datetime(1970, 1, 1)
+    #         ds[dim_name] = pd.to_datetime(ds[dim_name])
+    #     else:
+    #         print(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
+    #         raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds[dim_name].attrs['units']}")
     if len(ds[dim_name].dt.year.data) == 1:
         print("Time diff len", len(ds[dim_name].dt.year.data))
         is_range = False
@@ -673,7 +673,10 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         print("VECTOR", vector_variable_name, actual_x_variable, actual_y_variable)
 
     dimension_search = _find_dimensions(ds, actual_variable, variable, qp)
-    band_number = _calc_band_number_from_dimensions(dimension_search)
+    if netcdf_file.endswith('ncml'):
+        band_number = 1
+    else:
+        band_number = _calc_band_number_from_dimensions(dimension_search)
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
         layer.setProcessingKey('BANDS', f'1,2')
     else:
@@ -806,6 +809,20 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         # te = time.time()
         # print("save and create vrts ", te - ts) 
         layer.data = variable_file_vrt
+    elif netcdf_file.endswith('ncml'):
+        print("Must find netcdf file for data")
+        from lxml import etree
+        try:
+            ncml_netcdf_files = []
+            xtree = etree.parse(netcdf_file)
+            for f in xtree.findall(".//{http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2}netcdf"):
+                ncml_netcdf_files.append(f.attrib['location'])
+            layer.data = f'NETCDF:{ncml_netcdf_files[dimension_search[0]["selected_band_number"]]}:{actual_variable}'
+        except FileNotFoundError:
+            print(f"Could not find the ncml xml input file {netcdf_file}.")
+        except Exception:
+            raise HTTPException(status_code=500, detail=f"Failed to parse ncml file to find individual file.")
+
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
