@@ -1,6 +1,6 @@
 FROM docker.io/mambaorg/micromamba:1.5.1-jammy
 
-LABEL maintainer="massimods@met.no"
+LABEL maintainer="trygveas@met.no"
 
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
     MAPGEN_VERSION=main
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
-RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}"
+RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER ./start.sh /start.sh
 
