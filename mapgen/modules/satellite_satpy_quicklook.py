@@ -249,7 +249,11 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     products_to_upload_to_ceph = []
     for _satpy_product in satpy_products_to_generate:
         if _satpy_product['satpy_product'] in satpy_products:
-            resample_scene.save_dataset(_satpy_product['satpy_product'], filename=os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename']))
+            tmp_satpy_product_filename = '.' + _satpy_product['satpy_product_filename']
+            resample_scene.save_dataset(_satpy_product['satpy_product'], filename=os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename))
+            if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)):
+                os.rename(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename),
+                          os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename']))
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
                 products_to_upload_to_ceph.append(_satpy_product)
     print(datetime.now(), "After save", str(products_to_upload_to_ceph))
