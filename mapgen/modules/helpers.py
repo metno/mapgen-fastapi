@@ -87,8 +87,17 @@ def find_config_for_this_netcdf(netcdf_path):
 def handle_request(map_object, full_request):
     ows_req = mapscript.OWSRequest()
     ows_req.type = mapscript.MS_GET_REQUEST
+    full_request_string = str(full_request.query_params)
     try:
-        ows_req.loadParamsFromURL(str(full_request.query_params))
+        # Replace automatic inserted &amp; instead of plain &
+        full_request_string = full_request_string.replace("&amp;", "&")
+        full_request_string = full_request_string.replace("&amp%3B", "&")
+        print("HER", full_request_string)
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
+    try:
+        ows_req.loadParamsFromURL(full_request_string)
     except mapscript.MapServerError:
         ows_req = mapscript.OWSRequest()
         ows_req.type = mapscript.MS_GET_REQUEST
@@ -99,7 +108,7 @@ def handle_request(map_object, full_request):
         ows_req.setParameter("VERSION", "1.3.0")
         ows_req.setParameter("REQUEST", "GetCapabilities")
     else:
-        print("ALL query params: ", str(full_request.query_params))
+        print("ALL query params: ", full_request_string)
     print("NumParams", ows_req.NumParams)
     print("TYPE", ows_req.type)
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
