@@ -305,8 +305,13 @@ def generic_quicklook(netcdf_path: str,
             forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
             print(forecast_time)
         except ValueError:
-            print("Could not find any forecast_reference_time. Use now.")
-            forecast_time = datetime.datetime.now()
+            print("Could not find any forecast_reference_time. Try use time_coverage_start.")
+            try:
+                forecast_time = datetime.datetime.fromisoformat(ds_disk.time_coverage_start)
+                print(forecast_time)
+            except Exception as ex:
+                print(f"Could not find any forecast_reference_time. Use now. Last unhandled exception: {str(ex)}")
+                forecast_time = datetime.datetime.now()
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
@@ -359,6 +364,7 @@ def generic_quicklook(netcdf_path: str,
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
     print(qp)
 
+    layer_no = 0
     map_object = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
@@ -394,6 +400,11 @@ def generic_quicklook(netcdf_path: str,
                     layer_contour = mapscript.layerObj()
                     if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True):
                         layer_no = map_object.insertLayer(layer_contour)
+
+    if layer_no == 0 and not map_object:
+        print(f"No layers {layer_no} or no map_object {map_object}")
+        raise HTTPException(status_code=500, detail=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
+                                                     "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
