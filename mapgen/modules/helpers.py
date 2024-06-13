@@ -299,8 +299,13 @@ def _find_projection(ds, variable, grid_mapping_cache):
             cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
             grid_mapping_cache[grid_mapping_name] = cs.to_proj4()
     except KeyError:
-        print(f"no grid_mapping for variable {variable}. Skipping this.")
-        return None
+        print(f"no grid_mapping for variable {variable}. Try Compute.")
+        try:
+            _, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            print(f"GIRD MAPPING NAME: {grid_mapping_name}")
+        except KeyError:
+            print(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
+            return None
     return grid_mapping_name
 
 def _extract_extent(ds, variable):
@@ -366,11 +371,32 @@ def find_time_diff(ds, dim_name):
         print("Is not range")
     return diff,diff_string,is_range
 
+def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
+    if 'latitude' in ds and 'longitude' in ds:
+        grid_mapping_name = "calculated_omerc"
+        from pyresample import geometry
+        swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
+        optimal = swath_def.compute_optimal_bb_area()
+        grid_mapping_cache[grid_mapping_name] = optimal.proj_str
+        return optimal, grid_mapping_name
+    raise KeyError
+
 def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file):
     """Generate getcapabilities for the netcdf file."""
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
-    if not grid_mapping_name:
-        return None
+    if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
+        # try make a generic bounding box from lat and lon if those exists
+        try:
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            ll_x = optimal_bb_area.area_extent[0]
+            ll_y = optimal_bb_area.area_extent[1]
+            ur_x = optimal_bb_area.area_extent[2]
+            ur_y = optimal_bb_area.area_extent[3]
+        except KeyError:
+            return None
+    else:
+        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
+
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
@@ -378,9 +404,15 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.name = variable
     layer.metadata.set("wms_title", variable)
 
-    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
+    if 'time' not in ds[variable].dims:
+        try:
+            valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
+            layer.metadata.set("wms_timeextent", f'{valid_time}')
+        except Exception:
+            print("Could not use time_coverange_start global attribute. wms_timeextent is not added")
+
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
@@ -441,8 +473,19 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     """Generate getcapabilities for vector fiels for the netcdf file."""
     print("ADDING vector")
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
-    if not grid_mapping_name:
-        return None
+    if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
+        # try make a generic bounding box from lat and lon if those exists
+        try:
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            ll_x = optimal_bb_area.area_extent[0]
+            ll_y = optimal_bb_area.area_extent[1]
+            ur_x = optimal_bb_area.area_extent[2]
+            ur_y = optimal_bb_area.area_extent[3]
+        except KeyError:
+            return None
+    else:
+        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
+
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     if variable.startswith('x_wind'):
@@ -458,9 +501,14 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         layer.name = f'{vector_variable_name}_vector_from_direction_and_speed'
     layer.metadata.set("wms_title", f'{vector_variable_name}')
     layer.setConnectionType(mapscript.MS_CONTOUR, "")
-    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
+    if 'time' not in ds[variable].dims:
+        try:
+            valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
+            layer.metadata.set("wms_timeextent", f'{valid_time}')
+        except Exception:
+            print("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
@@ -681,8 +729,10 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         actual_variable = actual_x_variable
         print("VECTOR", vector_variable_name, actual_x_variable, actual_y_variable)
 
+    grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
+
     dimension_search = _find_dimensions(ds, actual_variable, variable, qp)
-    if netcdf_file.endswith('ncml'):
+    if netcdf_file.endswith('ncml') or grid_mapping_name == 'calculated_omerc':
         band_number = 1
     else:
         band_number = _calc_band_number_from_dimensions(dimension_search)
@@ -691,7 +741,6 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     else:
         layer.setProcessingKey('BANDS', f'{band_number}')
 
-    grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
@@ -706,23 +755,23 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             try:
                 scale_factor = ds['wind_speed'].attrs['scale_factor']
             except KeyError:
-                print("No scale_factor in attrs")
+                print("No scale_factor in attrs, Use 1.")
                 scale_factor = 1.
             try:
                 add_offset = ds['wind_speed'].attrs['add_offset']
             except KeyError:
-                print("No scale_factor in attrs")
+                print("No add_offset in attrs. Use 0.")
                 add_offset = 0.
             speed = ds['wind_speed'] * scale_factor + add_offset
             try:
                 scale_factor = ds['wind_direction'].attrs['scale_factor']
             except KeyError:
-                print("No scale_factor in attrs")
+                print("No scale_factor in attrs. Use 1.")
                 scale_factor = 1.
             try:
                 add_offset = ds['wind_direction'].attrs['add_offset']
             except KeyError:
-                print("No scale_factor in attrs")
+                print("No add_offset in attrs. Use 0.")
                 add_offset = 0.
             from_direction = ds['wind_direction'] * scale_factor + add_offset
         else:
@@ -764,26 +813,72 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
         new_x = np.cos((90. - from_direction - 180) * np.pi/180) * speed
         new_y = np.sin((90. - from_direction - 180) * np.pi/180) * speed
-        new_x.attrs['grid_mapping'] = ds[actual_x_variable].attrs['grid_mapping']
-        new_y.attrs['grid_mapping'] = ds[actual_y_variable].attrs['grid_mapping']
         ds_xy = xr.Dataset({})
-        ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']]
         try:
-            print("Droping vars:", new_x.dims, len(new_x.dims))
-            if len(new_x.dims) == 2:
+            new_x.attrs['grid_mapping'] = ds[actual_x_variable].attrs['grid_mapping']
+            new_y.attrs['grid_mapping'] = ds[actual_y_variable].attrs['grid_mapping']
+            ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']]
+        except KeyError:
+            print("No grid mapping in dataset. Try use calculate.")
+            if grid_mapping_name == 'calculated_omerc':
+                from pyresample import geometry, kd_tree
+                swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
+                optimal_bb_area = swath_def.compute_optimal_bb_area()
+                cf_grid_mapping = 'oblique_mercator'
+                new_x.attrs['grid_mapping'] = cf_grid_mapping
+                new_y.attrs['grid_mapping'] = cf_grid_mapping
+                ds_xy[new_x.attrs['grid_mapping']] = 0
+                optimal_cf = optimal_bb_area.crs.to_cf()
+                ds_xy[new_x.attrs['grid_mapping']].attrs['azimuth_of_central_line'] = optimal_cf['azimuth_of_central_line']
+                ds_xy[new_x.attrs['grid_mapping']].attrs['latitude_of_projection_origin'] = optimal_cf['latitude_of_projection_origin']
+                ds_xy[new_x.attrs['grid_mapping']].attrs['longitude_of_projection_origin'] = optimal_cf['longitude_of_projection_origin']
+                ds_xy[new_x.attrs['grid_mapping']].attrs['scale_factor_at_projection_origin'] = optimal_cf['scale_factor_at_projection_origin']
+                ds_xy[new_x.attrs['grid_mapping']].attrs['false_easting'] = optimal_cf['false_easting']
+                ds_xy[new_x.attrs['grid_mapping']].attrs['false_northing'] = optimal_cf['false_northing']
+
+                resampled_new_x = kd_tree.resample_nearest(swath_def, new_x.data, optimal_bb_area, radius_of_influence=10000000)
+                resampled_new_y = kd_tree.resample_nearest(swath_def, new_y.data, optimal_bb_area, radius_of_influence=10000000)
+
+                ds_new_x = xr.DataArray(resampled_new_x,
+                                        attrs=ds[actual_x_variable].attrs,
+                                        dims=['y', 'x'],
+                                        coords=[('y', optimal_bb_area.projection_y_coords),
+                                                ('x', optimal_bb_area.projection_x_coords)])
+                ds_new_x.attrs['grid_mapping'] = cf_grid_mapping
+                ds_new_y = xr.DataArray(resampled_new_y,
+                                        attrs=ds[actual_y_variable].attrs,
+                                        dims=['y', 'x'],
+                                        coords=[('y', optimal_bb_area.projection_y_coords),
+                                                ('x', optimal_bb_area.projection_x_coords)])
+                ds_new_y.attrs['grid_mapping'] = cf_grid_mapping
+                print(ds_new_x)
+
+        if grid_mapping_name == 'calculated_omerc':
+            ds_xy[actual_x_variable] = ds_new_x
+            ds_xy[actual_y_variable] = ds_new_y
+            ds_xy['x'].attrs['long_name'] = "x-coordinate in Cartesian system"
+            ds_xy['x'].attrs['standard_name'] = "projection_x_coordinate"
+            ds_xy['x'].attrs['units'] = "m"
+            ds_xy['y'].attrs['long_name'] = "y-coordinate in Cartesian system"
+            ds_xy['y'].attrs['standard_name'] = "projection_y_coordinate"
+            ds_xy['y'].attrs['units'] = "m"
+        else:
+            try:
+                print("Droping vars:", new_x.dims, len(new_x.dims))
+                if len(new_x.dims) == 2:
+                    ds_xy[actual_x_variable] = new_x
+                else:
+                    ds_xy[actual_x_variable] = new_x.drop_vars(['latitude', 'longitude'])
+            except ValueError:
+                print("Failing drop vars")
                 ds_xy[actual_x_variable] = new_x
-            else:
-                ds_xy[actual_x_variable] = new_x.drop_vars(['latitude', 'longitude'])
-        except ValueError:
-            print("Failing drop vars")
-            ds_xy[actual_x_variable] = new_x
-        try:
-            if len(new_y.dims) == 2:
+            try:
+                if len(new_y.dims) == 2:
+                    ds_xy[actual_y_variable] = new_y
+                else:
+                    ds_xy[actual_y_variable] = new_y.drop_vars(['latitude', 'longitude'])
+            except ValueError:
                 ds_xy[actual_y_variable] = new_y
-            else:
-                ds_xy[actual_y_variable] = new_y.drop_vars(['latitude', 'longitude'])
-        except ValueError:
-            ds_xy[actual_y_variable] = new_y
         # te = time.time()
         # print("new dataset ", te - ts)
         # ts = time.time()
@@ -832,6 +927,25 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         except Exception:
             raise HTTPException(status_code=500, detail=f"Failed to parse ncml file to find individual file.")
 
+    elif grid_mapping_name == 'calculated_omerc':
+        print("Try to resample data on the fly and using gdal vsimem.")
+        from pyresample import kd_tree, geometry
+        swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
+        optimal_bb_area = swath_def.compute_optimal_bb_area()
+        resampled_variable = kd_tree.resample_nearest(swath_def, ds[actual_variable].data, optimal_bb_area, radius_of_influence=10000000)
+        min_val = np.nanmin(resampled_variable)
+        max_val = np.nanmax(resampled_variable)
+        driver = gdal.GetDriverByName('GTiff')
+        dst_ds = driver.Create('/vsimem/in_memory_output.tif',
+                               optimal_bb_area.x_size,
+                               optimal_bb_area.y_size,
+                               1,
+                               gdal.GDT_Float32)
+        dst_ds.SetProjection(optimal_bb_area.crs_wkt)
+        dst_ds.SetGeoTransform((optimal_bb_area.pixel_upper_left[0], optimal_bb_area.pixel_size_x, 0,
+                                optimal_bb_area.pixel_upper_left[1], 0, -optimal_bb_area.pixel_size_y))
+        dst_ds.GetRasterBand(1).WriteArray(resampled_variable)
+        layer.data = '/vsimem/in_memory_output.tif'
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
@@ -874,7 +988,14 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         layer.metadata.set("wms_title", '_'.join(variable.split("_")[:-1]))
     else:
         layer.metadata.set("wms_title", variable)
-    ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
+    if grid_mapping_name == 'calculated_omerc':
+        ll_x = optimal_bb_area.area_extent[0]
+        ll_y = optimal_bb_area.area_extent[1]
+        ur_x = optimal_bb_area.area_extent[2]
+        ur_y = optimal_bb_area.area_extent[3]
+    else:
+        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
+    print(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
 
 
@@ -948,12 +1069,15 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             print("Len 3")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+        elif not dimension_search:
+            print("Dimension search empty. Possible calculated field.")
+
         print("MIN:MAX ",min_val, max_val)
         #Grayscale
-        s = mapscript.classObj(layer)
         if style in 'contour': #variable.endswith('_contour'):
             print("Style in contour for style setup.")
             layer.labelitem = 'contour'
+            s = mapscript.classObj(layer)
             s.name = "contour"
             _style = mapscript.styleObj(s)
             _style.width = 1
@@ -989,16 +1113,54 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             label.angle = 0 #mapscript.MS_AUTO
             s.addLabel(label)
         elif style == 'raster':
-            s.name = "Linear grayscale using min and max not nan from data"
-            s.group = 'raster'
-            _style = mapscript.styleObj(s)
-            _style.rangeitem = 'pixel'
-            _style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
-            _style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
-            _style.minvalue = float(min_val)
-            _style.maxvalue = float(max_val)
+            if not _colormap_from_attribute(ds, actual_variable, layer):
+                # Use standard linear grayscale
+                s = mapscript.classObj(layer)
+                s.name = "Linear grayscale using min and max not nan from data"
+                s.group = 'raster'
+                _style = mapscript.styleObj(s)
+                _style.rangeitem = 'pixel'
+                _style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+                _style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+                _style.minvalue = float(min_val)
+                _style.maxvalue = float(max_val)
 
     return True
+
+def _colormap_from_attribute(ds, actual_variable, layer):
+    import importlib
+    return_val = False
+    try:
+        print(f"module to load {ds[actual_variable].colormap.split('.')[0]}")
+        loaded_module = importlib.import_module(ds[actual_variable].colormap.split(".")[0])
+        cm = getattr(loaded_module, 'cm')
+        tools = getattr(loaded_module, 'tools')
+        colormap = getattr(cm, ds[actual_variable].colormap.split(".")[-1])
+        colormap_dict = tools.get_dict(colormap)
+        minmax = ds[actual_variable].minmax.split(' ')
+        vals = np.linspace(float(minmax[0]), float(minmax[1]), num=33)
+        prev_val = vals[0]
+        index = 0
+        for val in vals[1:]:
+            print(val)
+            s = mapscript.classObj(layer)
+            s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {ds[actual_variable].units}"
+            s.group = 'raster'
+            s.setExpression(f'([pixel]>={prev_val} and [pixel]<{val})')
+            _style = mapscript.styleObj(s)
+            _style.color = mapscript.colorObj(red=int(colormap_dict['red'][index][1]*256),
+                                                green=int(colormap_dict['green'][index][1]*256),
+                                                blue=int(colormap_dict['blue'][index][1]*256))
+            prev_val = val
+            index += 1
+        return_val = True
+    except ModuleNotFoundError:
+        print(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
+    except AttributeError as ae:
+        print(f"Attribute not found: {str(ae)}")
+    except Exception:
+        raise
+    return return_val
 
 def generate_unique_dataset_string(ds, actual_x_variable, requested_epsg):
     try:
