@@ -387,6 +387,8 @@ def generic_quicklook(netcdf_path: str,
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
             for variable in variables:
+                if variable in ['longitude', 'latitude']:
+                    continue
                 layer = mapscript.layerObj()
                 if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                     layer_no = map_object.insertLayer(layer)
