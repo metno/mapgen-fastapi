@@ -33,3 +33,4 @@ dependencies:
 - cartopy
 - metpy
 - lxml
+- cmocean
