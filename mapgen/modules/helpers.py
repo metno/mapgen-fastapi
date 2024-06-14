@@ -1135,7 +1135,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
         cm = getattr(loaded_module, 'cm')
         tools = getattr(loaded_module, 'tools')
         colormap = getattr(cm, ds[actual_variable].colormap.split(".")[-1])
-        colormap_dict = tools.get_dict(colormap)
+        colormap_dict = tools.get_dict(colormap, N=32)
     except ModuleNotFoundError:
         print(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
     except AttributeError as ae:
@@ -1146,6 +1146,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
         minmax = ds[actual_variable].minmax.split(' ')
         min_val = float(minmax[0])
         max_val = float(minmax[1])
+        print(f"Using min max {min_val} {max_val}")
     except AttributeError as ae:
         print(f"Attribute not found: {str(ae)}. Using calculated min max.")
     except Exception:
