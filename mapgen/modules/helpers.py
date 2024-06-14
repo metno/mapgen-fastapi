@@ -1145,7 +1145,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
     try:
         minmax = ds[actual_variable].minmax.split(' ')
         min_val = float(minmax[0])
-        max_val = float(minmax[1]),
+        max_val = float(minmax[1])
     except AttributeError as ae:
         print(f"Attribute not found: {str(ae)}. Using calculated min max.")
     except Exception:
