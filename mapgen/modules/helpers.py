@@ -1142,15 +1142,14 @@ def _colormap_from_attribute(ds, actual_variable, layer):
         prev_val = vals[0]
         index = 0
         for val in vals[1:]:
-            print(val)
             s = mapscript.classObj(layer)
             s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {ds[actual_variable].units}"
             s.group = 'raster'
             s.setExpression(f'([pixel]>={prev_val} and [pixel]<{val})')
             _style = mapscript.styleObj(s)
             _style.color = mapscript.colorObj(red=int(colormap_dict['red'][index][1]*256),
-                                                green=int(colormap_dict['green'][index][1]*256),
-                                                blue=int(colormap_dict['blue'][index][1]*256))
+                                              green=int(colormap_dict['green'][index][1]*256),
+                                              blue=int(colormap_dict['blue'][index][1]*256))
             prev_val = val
             index += 1
         return_val = True
