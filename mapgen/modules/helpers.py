@@ -741,6 +741,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     else:
         layer.setProcessingKey('BANDS', f'{band_number}')
 
+    set_scale_processing_key = False
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
@@ -945,6 +946,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                                 optimal_bb_area.pixel_upper_left[1], 0, -optimal_bb_area.pixel_size_y))
         dst_ds.GetRasterBand(1).WriteArray(resampled_variable)
         layer.data = '/vsimem/in_memory_output.tif'
+        set_scale_processing_key = True
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
@@ -1112,7 +1114,8 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             label.angle = 0 #mapscript.MS_AUTO
             s.addLabel(label)
         elif style == 'raster':
-            if not _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
+            cfa, min_val, max_val = _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key)
+            if not cfa:
                 # Use standard linear grayscale
                 s = mapscript.classObj(layer)
                 s.name = "Linear grayscale using min and max not nan from data"
@@ -1123,10 +1126,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                 _style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
                 _style.minvalue = float(min_val)
                 _style.maxvalue = float(max_val)
+            print(f"After comolrmap min max {min_val} {max_val}")
 
     return True
 
-def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
+def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key):
     import importlib
     return_val = False
     try:
@@ -1146,9 +1150,14 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
         minmax = ds[actual_variable].minmax.split(' ')
         min_val = float(minmax[0])
         max_val = float(minmax[1])
-        print(f"Using min max {min_val} {max_val}")
+        print(f"Using from minmax min max {min_val} {max_val}")
+        if set_scale_processing_key:
+            print("Setting mapserver processing scale and buckets")
+            layer.setProcessingKey('SCALE', f'{min_val:0.1f},{max_val:0.1f}')
+            layer.setProcessingKey('SCALE_BUCKETS', '32')
     except AttributeError as ae:
         print(f"Attribute not found: {str(ae)}. Using calculated min max.")
+        print(f"Using from calculation min max {min_val} {max_val}")
     except Exception:
         raise
     try:
@@ -1164,7 +1173,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
             s = mapscript.classObj(layer)
             s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {units}"
             s.group = 'raster'
-            s.setExpression(f'([pixel]>={prev_val} and [pixel]<{val})')
+            s.setExpression(f'([pixel]>={prev_val:0.1f} and [pixel]<{val:0.1f})')
             _style = mapscript.styleObj(s)
             _style.color = mapscript.colorObj(red=int(colormap_dict['red'][index][1]*256),
                                               green=int(colormap_dict['green'][index][1]*256),
@@ -1177,7 +1186,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
     except Exception:
         raise
 
-    return return_val
+    return return_val, min_val, max_val
 
 def generate_unique_dataset_string(ds, actual_x_variable, requested_epsg):
     try:
