@@ -28,7 +28,7 @@ from mapgen.modules.helpers import find_config_for_this_netcdf
 
 router = APIRouter()
 
-@router.get("/api/get_quicklook{netcdf_path:path}", response_class=Response)
+@router.get("/api/get_quicklook{netcdf_path:path}", response_class=Response, include_in_schema=False)
 async def get_quicklook(netcdf_path: str,
                         full_request: Request,
                         products: list = Query(default=[])):
@@ -55,7 +55,7 @@ async def get_quicklook(netcdf_path: str,
     # Call module
     return loaded_module(netcdf_path, full_request, products, product_config)
 
-@router.get("/{image_path:path}")
+@router.get("/{image_path:path}", include_in_schema=False)
 async def main(image_path: str):
     """Need this to local images"""
     print("image path:", image_path)

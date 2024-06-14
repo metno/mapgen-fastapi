@@ -30,7 +30,7 @@ templates = Jinja2Templates(directory='/app/templates')
 router = fastapi.APIRouter()
 
 # placeholder to fill an a template (html+js viewer or mapfile etc.) 
-@router.get("/dashboard", name='dashboard', response_model=Datasource)
+@router.get("/dashboard", name='dashboard', response_model=Datasource, include_in_schema=False)
 async def get_dashboard(request: Request,
                         data: str = Query(None,
                                                  title="dict of data",
