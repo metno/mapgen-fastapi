@@ -851,7 +851,6 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                                         coords=[('y', optimal_bb_area.projection_y_coords),
                                                 ('x', optimal_bb_area.projection_x_coords)])
                 ds_new_y.attrs['grid_mapping'] = cf_grid_mapping
-                print(ds_new_x)
 
         if grid_mapping_name == 'calculated_omerc':
             ds_xy[actual_x_variable] = ds_new_x
@@ -1113,7 +1112,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             label.angle = 0 #mapscript.MS_AUTO
             s.addLabel(label)
         elif style == 'raster':
-            if not _colormap_from_attribute(ds, actual_variable, layer):
+            if not _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
                 # Use standard linear grayscale
                 s = mapscript.classObj(layer)
                 s.name = "Linear grayscale using min and max not nan from data"
@@ -1127,7 +1126,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
     return True
 
-def _colormap_from_attribute(ds, actual_variable, layer):
+def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val):
     import importlib
     return_val = False
     try:
@@ -1137,13 +1136,32 @@ def _colormap_from_attribute(ds, actual_variable, layer):
         tools = getattr(loaded_module, 'tools')
         colormap = getattr(cm, ds[actual_variable].colormap.split(".")[-1])
         colormap_dict = tools.get_dict(colormap)
+    except ModuleNotFoundError:
+        print(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
+    except AttributeError as ae:
+        print(f"Attribute not found: {str(ae)}")
+    except Exception:
+        raise
+    try:
         minmax = ds[actual_variable].minmax.split(' ')
-        vals = np.linspace(float(minmax[0]), float(minmax[1]), num=33)
+        min_val = float(minmax[0])
+        max_val = float(minmax[1]),
+    except AttributeError as ae:
+        print(f"Attribute not found: {str(ae)}. Using calculated min max.")
+    except Exception:
+        raise
+    try:
+        units = ds[actual_variable].units
+    except AttributeError as ae:
+        print(f"Attribute not found: {str(ae)}. No units.")
+        units = ""
+    try:
+        vals = np.linspace(min_val, max_val, num=33)
         prev_val = vals[0]
         index = 0
         for val in vals[1:]:
             s = mapscript.classObj(layer)
-            s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {ds[actual_variable].units}"
+            s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {units}"
             s.group = 'raster'
             s.setExpression(f'([pixel]>={prev_val} and [pixel]<{val})')
             _style = mapscript.styleObj(s)
@@ -1153,12 +1171,11 @@ def _colormap_from_attribute(ds, actual_variable, layer):
             prev_val = val
             index += 1
         return_val = True
-    except ModuleNotFoundError:
-        print(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
     except AttributeError as ae:
         print(f"Attribute not found: {str(ae)}")
     except Exception:
         raise
+
     return return_val
 
 def generate_unique_dataset_string(ds, actual_x_variable, requested_epsg):
