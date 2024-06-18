@@ -186,6 +186,8 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
         raise HTTPException(status_code=500, detail="Failed to upload file to s3.")
+    finally:
+        s3_client.close()
     print("Done uploading")
     return True
 
