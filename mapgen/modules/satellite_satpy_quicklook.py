@@ -24,7 +24,7 @@ import boto3
 import botocore
 import rasterio
 import traceback
-from fastapi import Request, Query, HTTPException
+from fastapi import Request, Query, HTTPException, BackgroundTasks
 from satpy import Scene
 import mapscript
 from glob import glob
@@ -57,8 +57,9 @@ def _get_satpy_products(satpy_products, full_request, default_dataset):
 def _get_mapfiles_path(regexp_pattern_module):
     return regexp_pattern_module['mapfiles_path']
 
-def generate_satpy_quicklook(netcdf_path: str,
+async def generate_satpy_quicklook(netcdf_path: str,
                              full_request: Request,
+                             background_task: BackgroundTasks,
                              satpy_products: list = Query(default=[]),
                              product_config: dict = {}):
     
@@ -89,7 +90,7 @@ def generate_satpy_quicklook(netcdf_path: str,
     
     (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path, product_config)
     start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
-    similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time, netcdf_path)
+    similar_netcdf_paths = await _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time, netcdf_path)
     print("Similar netcdf paths:", similar_netcdf_paths)
     ms_satpy_products = _get_satpy_products(satpy_products, full_request, product_config['default_dataset'])
     print("satpy product/layer", ms_satpy_products)
@@ -104,7 +105,7 @@ def generate_satpy_quicklook(netcdf_path: str,
     
     
     try:
-        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
+        if not await _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
             raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
@@ -115,16 +116,35 @@ def generate_satpy_quicklook(netcdf_path: str,
 
     for satpy_product in satpy_products_to_generate:
         layer = mapscript.layerObj()
-        _generate_layer(start_time,
+        await _generate_layer(start_time,
                         satpy_product['satpy_product'],
                         satpy_product['satpy_product_filename'],
                         satpy_product['bucket'],
                         layer)
         layer_no = map_object.insertLayer(layer)
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'satpy-products-{start_time:%Y%m%d%H%M%S}.map'))
-    return handle_request(map_object, full_request)
+    background_task.add_task(clean_data, map_object)
+    return await handle_request(map_object, full_request)
 
-def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
+async def clean_data(map_object):
+    print("I need to clean some data to avoid memort stash")
+    print(sys.getrefcount(map_object))
+    for layer in range(map_object.numlayers):
+        for cls in range(map_object.getLayer(layer).numclasses):
+            for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
+                ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                del ref
+                ref = None
+            ref = map_object.getLayer(layer).removeClass(0)
+            del ref
+            ref = None
+        ref = map_object.removeLayer(layer)
+        del ref
+        ref = None
+    del map_object
+    map_object = None
+
+async def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
     try:
         print("Rasterio open")
@@ -150,6 +170,7 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     layer.metadata.set("wms_timeextent", f'{start_time:%Y-%m-%dT%H:%M:%S}Z/{start_time:%Y-%m-%dT%H:%M:%S}Z')
     layer.metadata.set("wms_default", f'{start_time:%Y-%m-%dT%H:%M:%S}Z')
     dataset.close()
+    dataset = None
     print("Complete generate layer")
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request):
@@ -217,7 +238,7 @@ def _exists_on_ceph(satpy_product, start_time):
         exists = True
     return exists
 
-def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
+async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
@@ -259,9 +280,16 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
                 products_to_upload_to_ceph.append(_satpy_product)
     print(datetime.now(), "After save", str(products_to_upload_to_ceph))
+    return_val = True
     if not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time, product_config):
-        return False
-    return True
+        return_val = False
+    del swath_scene
+    del bb_area
+    del resample_scene
+    swath_scene = None
+    bb_area = None
+    resample_scene = None
+    return return_val
 
 def _parse_filename(netcdf_path, product_config):
     """Parse the netcdf to return start_time."""
@@ -275,7 +303,7 @@ def _parse_filename(netcdf_path, product_config):
         print("No match: ", netcdf_path)
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
-def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
+async def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
     if 'fy3d' in platform_name or 'aqua' in platform_name or 'terra' in platform_name:
         similar_netcdf_paths = [netcdf_path]
     else:

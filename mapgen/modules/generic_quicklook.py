@@ -35,10 +35,13 @@ Needed entries in the config:
 
 """
 import os
+import sys
 import pandas
 import datetime
 import mapscript
-from fastapi import Request, Query, HTTPException
+from osgeo import gdal
+
+from fastapi import Request, Query, HTTPException, BackgroundTasks
 import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
@@ -245,8 +248,9 @@ wind_rotation_cache = {}
 
 #     return True
 
-def generic_quicklook(netcdf_path: str,
+async def generic_quicklook(netcdf_path: str,
                       full_request: Request,
+                      background_task: BackgroundTasks,
                       products: list = Query(default=[]),
                       product_config: dict = {}):
     netcdf_path = netcdf_path.replace("//", "/")
@@ -366,13 +370,15 @@ def generic_quicklook(netcdf_path: str,
 
     layer_no = 0
     map_object = None
+    actual_variable = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "Generic netcdf WMS")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache):
+        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
         # Assume getcapabilities
@@ -410,5 +416,25 @@ def generic_quicklook(netcdf_path: str,
 
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
+    # add background task
+    background_task.add_task(clean_data, map_object, actual_variable)
     # Handle the request and return results.
     return handle_request(map_object, full_request)
+
+async def clean_data(map_object, actual_variable):
+    print(f"I need to clean some data to avoid memory stash: {actual_variable}")
+    for layer in range(map_object.numlayers):
+        for cls in range(map_object.getLayer(layer).numclasses):
+            for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
+                ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                del ref
+                ref = None
+            ref = map_object.getLayer(layer).removeClass(0)
+            del ref
+            ref = None
+        ref = map_object.removeLayer(layer)
+        del ref
+        ref = None
+    gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
+    del map_object
+    map_object = None

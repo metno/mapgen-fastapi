@@ -84,7 +84,7 @@ def find_config_for_this_netcdf(netcdf_path):
 
     return regexp_pattern_module
 
-def handle_request(map_object, full_request):
+async def handle_request(map_object, full_request):
     ows_req = mapscript.OWSRequest()
     ows_req.type = mapscript.MS_GET_REQUEST
     full_request_string = str(full_request.query_params)
@@ -301,7 +301,9 @@ def _find_projection(ds, variable, grid_mapping_cache):
     except KeyError:
         print(f"no grid_mapping for variable {variable}. Try Compute.")
         try:
-            _, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            del optimal_bb_area
+            optimal_bb_area = None
             print(f"GIRD MAPPING NAME: {grid_mapping_name}")
         except KeyError:
             print(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
@@ -392,6 +394,8 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
             ur_y = optimal_bb_area.area_extent[3]
+            del optimal_bb_area
+            optimal_bb_area = None
         except KeyError:
             return None
     else:
@@ -481,6 +485,8 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
             ur_y = optimal_bb_area.area_extent[3]
+            del optimal_bb_area
+            optimal_bb_area = None
         except KeyError:
             return None
     else:
@@ -696,7 +702,7 @@ def _add_wind_barb_100_150(map_obj, layer, colour_tripplet, min, max):
     style_base.setSymbolByName(map_obj, f"wind_barb_{min+2}")
     return
 
-def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache):
+async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache):
     try:
         variable = qp['layer']
     except KeyError:
@@ -712,7 +718,6 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         print("Empty style. Force raster.")
         style = 'raster'
     print(f"Selected style: {style}")
-
     actual_variable = variable
     #if style in 'contour': #variable.endswith('_contour'):
     #    actual_variable = '_'.join(variable.split("_")[:-1])
@@ -936,7 +941,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         min_val = np.nanmin(resampled_variable)
         max_val = np.nanmax(resampled_variable)
         driver = gdal.GetDriverByName('GTiff')
-        dst_ds = driver.Create('/vsimem/in_memory_output.tif',
+        dst_ds = driver.Create(f'/vsimem/in_memory_output_{actual_variable}.tif',
                                optimal_bb_area.x_size,
                                optimal_bb_area.y_size,
                                1,
@@ -945,8 +950,16 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         dst_ds.SetGeoTransform((optimal_bb_area.pixel_upper_left[0], optimal_bb_area.pixel_size_x, 0,
                                 optimal_bb_area.pixel_upper_left[1], 0, -optimal_bb_area.pixel_size_y))
         dst_ds.GetRasterBand(1).WriteArray(resampled_variable)
-        layer.data = '/vsimem/in_memory_output.tif'
+        layer.data = f'/vsimem/in_memory_output_{actual_variable}.tif'
         set_scale_processing_key = True
+        del dst_ds
+        dst_ds = None
+        del driver
+        driver = None
+        del resampled_variable
+        resampled_variable = None
+        del swath_def
+        swath_def = None
     else:
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
@@ -994,6 +1007,8 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         ll_y = optimal_bb_area.area_extent[1]
         ur_x = optimal_bb_area.area_extent[2]
         ur_y = optimal_bb_area.area_extent[3]
+        del optimal_bb_area
+        optimal_bb_area = None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
     print(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
@@ -1128,7 +1143,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                 _style.maxvalue = float(max_val)
             print(f"After comolrmap min max {min_val} {max_val}")
 
-    return True
+    return actual_variable
 
 def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key):
     import importlib

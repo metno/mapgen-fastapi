@@ -18,19 +18,25 @@ limitations under the License.
 """
 
 import os
-import importlib
+import sys
+#import importlib
 
 from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 # from fastapi import Request, Query, APIRouter, status
-from fastapi import Request, APIRouter, Query, HTTPException, status
+from fastapi import Request, APIRouter, Query, HTTPException, status, BackgroundTasks
 
 from mapgen.modules.helpers import find_config_for_this_netcdf
+
+import mapgen.modules.arome_arctic_quicklook
+import mapgen.modules.generic_quicklook
+import mapgen.modules.satellite_satpy_quicklook
 
 router = APIRouter()
 
 @router.get("/api/get_quicklook{netcdf_path:path}", response_class=Response, include_in_schema=False)
 async def get_quicklook(netcdf_path: str,
                         full_request: Request,
+                        background_tasks: BackgroundTasks,
                         products: list = Query(default=[])):
     print("Request query_params:", str(full_request.query_params))
     print("Request url scheme:", full_request.url.scheme)
@@ -44,7 +50,7 @@ async def get_quicklook(netcdf_path: str,
 
     # Load module from config
     try:
-        loaded_module = getattr(importlib.import_module(product_config['module']), product_config['module_function'])
+        loaded_module = getattr(sys.modules[product_config['module']], product_config['module_function'])
     except (AttributeError, ModuleNotFoundError) as e:
         print("Failed to load module:", product_config['module'], str(e))
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -53,7 +59,8 @@ async def get_quicklook(netcdf_path: str,
                                                 "Check the server config."})
 
     # Call module
-    return loaded_module(netcdf_path, full_request, products, product_config)
+    response = await loaded_module(netcdf_path, full_request, background_tasks, products, product_config)
+    return response
 
 @router.get("/{image_path:path}", include_in_schema=False)
 async def main(image_path: str):

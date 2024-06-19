@@ -250,7 +250,7 @@ summary_cache = {}
 
 #     return True
 
-def arome_arctic_quicklook(netcdf_path: str,
+async def arome_arctic_quicklook(netcdf_path: str,
                            full_request: Request,
                            products: list = Query(default=[]),
                            product_config: dict = {}):
