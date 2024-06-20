@@ -58,7 +58,7 @@ summary_cache = {}
 #         summary = _find_summary_from_csw(bn, forecast_time, full_request)
 #         if summary:
 #             summary_cache[bn] = summary
-#             print(summary_cache[bn])
+#             logger.debug(f"{summary_cache[bn]}")
 #         else:
 #             summary_cache[bn] = "Arome Arctic"
 #     map_object.web.metadata.set("wms_abstract", summary_cache[bn])
@@ -97,7 +97,7 @@ summary_cache = {}
 #         if dim_name in ['x', 'y']:
 #             continue
 #         if dim_name in 'time':
-#             #print("handle time")
+#             #logger.debug(f"handle time")
 #             diff, is_range = find_time_diff(ds, dim_name)
 #             if is_range:
 #                 diff_string = 'PT1H'
@@ -112,16 +112,16 @@ summary_cache = {}
 #                 elif diff == datetime.timedelta(hours=24):
 #                     diff_string = "PT24H"
 #                 else:
-#                     print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
+#                     logger.debug(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
 #                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
 #                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
 #                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
 #             else:
-#                 print("time list not implemented.")
+#                 logger.debug(f"time list not implemented.")
 #             layer.metadata.set("wms_default", f'{start_time}')
 #         else:
 #             if ds[dim_name].data.size > 1:
-#                 #print(f"add dimension {dim_name} for variable {variable}.")
+#                 #logger.debug(f"add dimension {dim_name} for variable {variable}.")
 #                 dims_list.append(dim_name)
 #                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
 #                 try:
@@ -131,7 +131,7 @@ summary_cache = {}
 #                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[dim_name].data]))
 #                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[dim_name].data)))
 #             # else:
-#             #     print(f"Skipping dimension {dim_name} due to one size dimmension.")
+#             #     logger.debug(f"Skipping dimension {dim_name} due to one size dimmension.")
 
 #     if dims_list:
 #         layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
@@ -161,7 +161,7 @@ summary_cache = {}
 
 # def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file):
 #     """Generate getcapabilities for vector fiels for the netcdf file."""
-#     print("ADDING vector")
+#     logger.debug(f"ADDING vector")
 #     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
 #     if not grid_mapping_name:
 #         return None
@@ -183,7 +183,7 @@ summary_cache = {}
 #         if dim_name in ['x', 'y']:
 #             continue
 #         if dim_name in 'time':
-#             print("handle time")
+#             logger.debug(f"handle time")
 #             diff, is_range = find_time_diff(ds, dim_name)
 #             if is_range:
 #                 diff_string = 'PT1H'
@@ -198,12 +198,12 @@ summary_cache = {}
 #                 elif diff == datetime.timedelta(hours=24):
 #                     diff_string = "PT24H"
 #                 else:
-#                     print(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
+#                     logger.debug(f"Do not understand this time interval: {diff}. Assume {diff_string}.")
 #                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
 #                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
 #                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
 #             else:
-#                 print("time list not implemented.")
+#                 logger.debug(f"time list not implemented.")
 #             layer.metadata.set("wms_default", f'{start_time}')
 #         else:
 #             if ds[dim_name].data.size > 1:
@@ -246,7 +246,7 @@ summary_cache = {}
 #     style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
 #     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
 
-#     print("ADDing vector at end")
+#     logger.debug(f"ADDing vector at end")
 
 #     return True
 
@@ -274,13 +274,13 @@ async def arome_arctic_quicklook(netcdf_path: str,
     try:
         forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
     except KeyError:
-        print("Could not find forecast time or analysis time from dataset. Try parse from filename.")
+        logger.debug(f"Could not find forecast time or analysis time from dataset. Try parse from filename.")
         # Parse the netcdf filename to get start time or reference time
         _, _forecast_time = _parse_filename(netcdf_path, product_config)
         forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
-        print(forecast_time)
+        logger.debug(f"{forecast_time}")
 
-    # print(variables)
+    # logger.debug(f"{variables}")
     # Loop over all variable names to add layer for each variable including needed dimmensions.
     #   Time
     #   Height
@@ -292,7 +292,7 @@ async def arome_arctic_quicklook(netcdf_path: str,
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
-    print("QP:", qp)
+    logger.debug(f"QP: {qp}")
 
     map_object = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
@@ -301,13 +301,13 @@ async def arome_arctic_quicklook(netcdf_path: str,
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "WMS Arome Arctic.")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        if _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache):
+        if await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache):
             layer_no = map_object.insertLayer(layer)
     else:
         # Assume getcapabilities
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
         if os.path.exists(mapserver_map_file):
-            print(f"Reuse existing getcapabilities map file {mapserver_map_file}")
+            logger.debug(f"Reuse existing getcapabilities map file {mapserver_map_file}")
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
@@ -320,7 +320,7 @@ async def arome_arctic_quicklook(netcdf_path: str,
                 if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
-                    print(f"Add wind vector layer for {variable}.")
+                    logger.debug(f"Add wind vector layer for {variable}.")
                     layer_contour = mapscript.layerObj()
                     if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
                         layer_no = map_object.insertLayer(layer_contour)
@@ -328,5 +328,5 @@ async def arome_arctic_quicklook(netcdf_path: str,
     map_object.save(mapserver_map_file)
 
     # Handle the request and return results.
-    return handle_request(map_object, full_request)
+    return await handle_request(map_object, full_request)
 
