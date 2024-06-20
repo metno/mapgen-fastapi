@@ -37,6 +37,7 @@ Needed entries in the config:
 import os
 import sys
 import pandas
+import logging
 import datetime
 import mapscript
 from osgeo import gdal
@@ -50,6 +51,8 @@ from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapab
 grid_mapping_cache = {}
 summary_cache = {}
 wind_rotation_cache = {}
+
+logger = logging.getLogger(__name__)
 
 # def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config):
 #     try:
@@ -257,7 +260,7 @@ async def generic_quicklook(netcdf_path: str,
     orig_netcdf_path = netcdf_path
     try:
         if netcdf_path.startswith(product_config['base_netcdf_directory']):
-            print("Request with full path. Please fix your request. Depricated from version 2.0.0.")
+            logger.debug("Request with full path. Please fix your request. Depricated from version 2.0.0.")
         elif os.path.isabs(netcdf_path):
             netcdf_path = netcdf_path[1:]
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
@@ -290,31 +293,31 @@ async def generic_quicklook(netcdf_path: str,
                 else:
                     raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
             try:
-                print(ds_disk['time'].dt)
+                logger.debug(f"{ds_disk['time'].dt}")
             except TypeError:
                 if ds_disk['time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
                     ds_disk['time'] = pandas.TimedeltaIndex(ds_disk['time'], unit='s') + datetime.datetime(1970, 1, 1)
                     ds_disk['time'] = pandas.to_datetime(ds_disk['time'])
                 else:
-                    print(f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
+                    logger.debug(f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
                     raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
 
         else:
             forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
     except KeyError:
         try:
-            print("Could not find forecast time or analysis time from dataset. Try parse from filename.")
+            logger.debug("Could not find forecast time or analysis time from dataset. Try parse from filename.")
             # Parse the netcdf filename to get start time or reference time
             _, _forecast_time = _parse_filename(netcdf_path, product_config)
             forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
-            print(forecast_time)
+            logger.debug(f"{forecast_time}")
         except ValueError:
-            print("Could not find any forecast_reference_time. Try use time_coverage_start.")
+            logger.debug("Could not find any forecast_reference_time. Try use time_coverage_start.")
             try:
                 forecast_time = datetime.datetime.fromisoformat(ds_disk.time_coverage_start)
-                print(forecast_time)
+                logger.debug(f"{forecast_time}")
             except Exception as ex:
-                print(f"Could not find any forecast_reference_time. Use now. Last unhandled exception: {str(ex)}")
+                logger.debug(f"Could not find any forecast_reference_time. Use now. Last unhandled exception: {str(ex)}")
                 forecast_time = datetime.datetime.now()
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
@@ -366,7 +369,7 @@ async def generic_quicklook(netcdf_path: str,
     # map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config),"symbol.sym"))
 
     qp = {k.lower(): v for k, v in full_request.query_params.items()}
-    print(qp)
+    logger.debug(f"{qp}")
 
     layer_no = 0
     map_object = None
@@ -377,14 +380,14 @@ async def generic_quicklook(netcdf_path: str,
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "Generic netcdf WMS")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
         # Assume getcapabilities
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
         if os.path.exists(mapserver_map_file):
-            print(f"Reuse existing getcapabilities map file {mapserver_map_file}")
+            logger.debug(f"Reuse existing getcapabilities map file {mapserver_map_file}")
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
@@ -399,18 +402,18 @@ async def generic_quicklook(netcdf_path: str,
                 if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
-                    print(f"Add wind vector layer for {variable}.")
+                    logger.debug(f"Add wind vector layer for {variable}.")
                     layer_contour = mapscript.layerObj()
                     if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False):
                         layer_no = map_object.insertLayer(layer_contour)
                 if variable == 'wind_direction' and 'wind_speed' in variables:
-                    print(f"Add wind vector layer based on wind direction and speed for {variable}.")
+                    logger.debug(f"Add wind vector layer based on wind direction and speed for {variable}.")
                     layer_contour = mapscript.layerObj()
                     if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True):
                         layer_no = map_object.insertLayer(layer_contour)
 
     if layer_no == 0 and not map_object:
-        print(f"No layers {layer_no} or no map_object {map_object}")
+        logger.debug(f"No layers {layer_no} or no map_object {map_object}")
         raise HTTPException(status_code=500, detail=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
                                                      "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 
@@ -419,16 +422,19 @@ async def generic_quicklook(netcdf_path: str,
     # add background task
     background_task.add_task(clean_data, map_object, actual_variable)
     # Handle the request and return results.
-    return handle_request(map_object, full_request)
+    return await handle_request(map_object, full_request)
 
 async def clean_data(map_object, actual_variable):
-    print(f"I need to clean some data to avoid memory stash: {actual_variable}")
+    logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
     for layer in range(map_object.numlayers):
         for cls in range(map_object.getLayer(layer).numclasses):
-            for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
-                ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
-                del ref
-                ref = None
+            try:
+                for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
+                    ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                    del ref
+                    ref = None
+            except AttributeError:
+                pass
             ref = map_object.getLayer(layer).removeClass(0)
             del ref
             ref = None

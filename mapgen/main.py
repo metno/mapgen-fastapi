@@ -23,6 +23,45 @@ import uvicorn
 from mapgen.views import dashboard
 from mapgen.modules import get_quicklook
 
+import logging
+from gunicorn import glogging
+
+
+logging_cfg = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'KeyValueFormatter': {
+            'format': (
+                '[%(asctime)s] [%(process)d] '
+                '[%(levelname)s] %(message)s'
+            )
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'KeyValueFormatter',
+        }
+    },
+    'loggers': {
+        'gunicorn.access': {
+            'propagate': True,
+        },
+        'gunicorn.error': {
+            'propagate': True,
+        },
+    },
+    'root': {
+        'level': 'DEBUG',
+        'handlers': ['console'],
+    }
+}
+
+def configure_logging():
+    logging.config.dictConfig(logging_cfg)
+
 app = fastapi.FastAPI(title="MapGen",
                       description="API for handeling OGC WMS request to data. Each data type needs an implemented module and a corresponding config.",
                       version="1.0.0",
@@ -46,6 +85,7 @@ def configure_routing():
     app.include_router(get_quicklook.router)
 
 def configure():
+    configure_logging()
     configure_routing()
 
 

@@ -22,6 +22,7 @@ import re
 import sys
 import yaml
 import hashlib
+import logging
 import datetime
 import requests
 import tempfile
@@ -40,6 +41,8 @@ from cartopy import crs
 import metpy # needed for xarray's metpy accessor
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 def _read_config_file(regexp_config_file):
     regexp_config = None
     try:
@@ -47,7 +50,7 @@ def _read_config_file(regexp_config_file):
             with open(regexp_config_file) as f:
                 regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
     except Exception as e:
-        print(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
+        logger.debug(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
         pass
     return regexp_config
 
@@ -64,18 +67,18 @@ def find_config_for_this_netcdf(netcdf_path):
     if regexp_config:
         try:
             for url_path_regexp_pattern in regexp_config:
-                print(url_path_regexp_pattern)
+                logger.debug(f"{url_path_regexp_pattern}")
                 pattern = re.compile(url_path_regexp_pattern['pattern'])
                 if pattern.match(netcdf_path):
-                    print("Got match. Need to load module:", url_path_regexp_pattern['module'])
+                    logger.debug(f"Got match. Need to load module: {url_path_regexp_pattern['module']}")
                     regexp_pattern_module = url_path_regexp_pattern
                     break
             else:
-                print(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
-                print("Please review your config if you expect this path to be handled.")
+                logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                logger.debug("Please review your config if you expect this path to be handled.")
             
         except Exception as e:
-            print(f"Exception in the netcdf_path match part with {str(e)}")
+            logger.debug(f"Exception in the netcdf_path match part with {str(e)}")
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
             raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
@@ -92,7 +95,7 @@ async def handle_request(map_object, full_request):
         # Replace automatic inserted &amp; instead of plain &
         full_request_string = full_request_string.replace("&amp;", "&")
         full_request_string = full_request_string.replace("&amp%3B", "&")
-        print("HER", full_request_string)
+        logger.debug(f"HER {full_request_string}")
     except Exception as e:
         raise HTTPException(status_code=500,
                             detail=f"failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
@@ -103,14 +106,14 @@ async def handle_request(map_object, full_request):
         ows_req.type = mapscript.MS_GET_REQUEST
         pass
     if not full_request.query_params or (ows_req.NumParams == 1 and 'satpy_products' in full_request.query_params):
-        print("Query params are empty or only contains satpy-product query parameter. Force getcapabilities")
+        logger.debug("Query params are empty or only contains satpy-product query parameter. Force getcapabilities")
         ows_req.setParameter("SERVICE", "WMS")
         ows_req.setParameter("VERSION", "1.3.0")
         ows_req.setParameter("REQUEST", "GetCapabilities")
     else:
-        print("ALL query params: ", full_request_string)
-    print("NumParams", ows_req.NumParams)
-    print("TYPE", ows_req.type)
+        logger.debug(f"ALL query params: {full_request_string}")
+    logger.debug(f"NumParams {ows_req.NumParams}")
+    logger.debug(f"TYPE {ows_req.type}")
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
         mapscript.msIO_installStdoutToBuffer()
         try:
@@ -122,7 +125,7 @@ async def handle_request(map_object, full_request):
             if _styles.lower() in 'vector':
                 ows_req.setParameter("STYLES", "")
         except TypeError:
-            print("STYLES not in the request. Nothing to reset.")
+            logger.debug("STYLES not in the request. Nothing to reset.")
             pass
         try:
             map_object.OWSDispatch( ows_req )
@@ -135,7 +138,7 @@ async def handle_request(map_object, full_request):
         mapscript.msIO_installStdoutToBuffer()
         dispatch_status = map_object.OWSDispatch(ows_req)
         if dispatch_status != mapscript.MS_SUCCESS:
-            print("DISPATCH status", dispatch_status)
+            logger.debug(f"DISPATCH status {dispatch_status}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
         mapscript.msIO_stripStdoutBufferContentHeaders()
         _result = mapscript.msIO_getStdoutBufferBytes()
@@ -178,7 +181,7 @@ def _north(projection: crs.CRS, requested_epsg, x_in: xr.DataArray, y_in: xr.Dat
 
     if isinstance(projection, crs.PlateCarree):
         # No need for rotation
-        print("No rotation ", projection)
+        logger.debug(f"No rotation {projection}")
         north_u = x
         north_v = y
     elif requested_epsg == 4326:
@@ -226,7 +229,7 @@ def _find_summary_from_csw(search_fname, forecast_time, full_request):
         search_string += "deterministic_"
     if search_string != "":
         search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-        print("CSW Search string", search_string)
+        logger.debug(f"CSW Search string {search_string}")
         netloc = full_request.url.netloc
         if 's-enda' in netloc:
             netloc = netloc.replace("fastapi", "csw")
@@ -238,7 +241,7 @@ def _find_summary_from_csw(search_fname, forecast_time, full_request):
         try:
             xml_string = requests.get(url, timeout=10).text
         except requests.exceptions.Timeout:
-            print("csw request timed out. Skip summary")
+            logger.debug("csw request timed out. Skip summary")
             return summary_text
         root = etree.fromstring(xml_string.encode('utf-8'))
         summarys = root.xpath('.//atom:summary', namespaces=root.nsmap)
@@ -246,7 +249,7 @@ def _find_summary_from_csw(search_fname, forecast_time, full_request):
             summary_text = summary.text
             break
     else:
-        print("Not enough data to build CSW search_string for summary. Please add if applicable.")
+        logger.debug("Not enough data to build CSW search_string for summary. Please add if applicable.")
     return summary_text
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, xr_dataset, summary_cache, wms_title):
@@ -256,7 +259,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_
         summary = _find_summary_from_csw(bn, forecast_time, full_request)
         if summary:
             summary_cache[bn] = summary
-            print(summary_cache[bn])
+            logger.debug(f"{summary_cache[bn]}")
         else:
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
@@ -287,7 +290,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_
                                  float(np.nanmax(xr_dataset['longitude'].data)),
                                  float(np.nanmax(xr_dataset['latitude'].data)))
         except KeyError:
-            print("Could not detect extent of dataset. Force full Earth.")
+            logger.debug("Could not detect extent of dataset. Force full Earth.")
             map_object.setExtent(-180, -90, 180, 90)
     return
 
@@ -299,14 +302,14 @@ def _find_projection(ds, variable, grid_mapping_cache):
             cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
             grid_mapping_cache[grid_mapping_name] = cs.to_proj4()
     except KeyError:
-        print(f"no grid_mapping for variable {variable}. Try Compute.")
+        logger.debug(f"no grid_mapping for variable {variable}. Try Compute.")
         try:
             optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
             del optimal_bb_area
             optimal_bb_area = None
-            print(f"GIRD MAPPING NAME: {grid_mapping_name}")
+            logger.debug(f"GIRD MAPPING NAME: {grid_mapping_name}")
         except KeyError:
-            print(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
+            logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
             return None
     return grid_mapping_name
 
@@ -337,16 +340,16 @@ def find_time_diff(ds, dim_name):
     is_range = True
     diff_string = None
     # try:
-    #     print(ds[dim_name].dt)
+    #     logger.debug(f"{ds[dim_name].dt}")
     # except TypeError:
     #     if ds[dim_name].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
     #         ds[dim_name] = pd.TimedeltaIndex(ds[dim_name], unit='s') + datetime.datetime(1970, 1, 1)
     #         ds[dim_name] = pd.to_datetime(ds[dim_name])
     #     else:
-    #         print(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
+    #         logger.debug(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
     #         raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds[dim_name].attrs['units']}")
     if len(ds[dim_name].dt.year.data) == 1:
-        print("Time diff len", len(ds[dim_name].dt.year.data))
+        logger.debug(f"Time diff len {len(ds[dim_name].dt.year.data)}")
         is_range = False
     else:
         for y,m,d,h,minute,s in zip(ds[dim_name].dt.year.data, ds[dim_name].dt.month.data, ds[dim_name].dt.day.data, ds[dim_name].dt.hour.data, ds[dim_name].dt.minute.data, ds[dim_name].dt.second.data):
@@ -368,9 +371,9 @@ def find_time_diff(ds, dim_name):
             diff_string = f"PT{h}H"
         else:
             diff_string = f"P{diff.days}D"
-        print(f"DIFF STRING {diff_string}")
+        logger.debug(f"DIFF STRING {diff_string}")
     else:
-        print("Is not range")
+        logger.debug("Is not range")
     return diff,diff_string,is_range
 
 def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
@@ -415,21 +418,21 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
             layer.metadata.set("wms_timeextent", f'{valid_time}')
         except Exception:
-            print("Could not use time_coverange_start global attribute. wms_timeextent is not added")
+            logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
-        print(f"Checking dimension: {dim_name}")
+        logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
-            print("handle time")
+            logger.debug("handle time")
             _, diff_string, is_range = find_time_diff(ds, dim_name)
             if is_range:
                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
             else:
-                print("Use time list.")
+                logger.debug("Use time list.")
                 time_list = []
                 for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
                     time_list.append(f"{str(d.data)}")
@@ -440,14 +443,14 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             if ds[dim_name].data.size > 1:
                 actual_dim_name = dim_name
                 if dim_name == 'height':
-                    print("Rename getcapabilities height dimension to height_dimension.")
+                    logger.debug("Rename getcapabilities height dimension to height_dimension.")
                     dim_name = dim_name + "_dimension"
                 dims_list.append(dim_name)
                 layer.metadata.set(f"wms_{dim_name}_item", dim_name)
                 try:
                     layer.metadata.set(f"wms_{dim_name}_units", ds[actual_dim_name].attrs['units'])
                 except KeyError:
-                    print(f"Failed to set metadata units for dimmension name {dim_name}. Forcing to 1.")
+                    logger.debug(f"Failed to set metadata units for dimmension name {dim_name}. Forcing to 1.")
                     layer.metadata.set(f"wms_{dim_name}_units", '1')
                 layer.metadata.set(f"wms_{dim_name}_extent", ','.join([str(d) for d in ds[actual_dim_name].data]))
                 layer.metadata.set(f"wms_{dim_name}_default", str(max(ds[actual_dim_name].data)))
@@ -475,7 +478,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
 
 def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False):
     """Generate getcapabilities for vector fiels for the netcdf file."""
-    print("ADDING vector")
+    logger.debug("ADDING vector")
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
@@ -514,19 +517,19 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
             layer.metadata.set("wms_timeextent", f'{valid_time}')
         except Exception:
-            print("Could not use time_coverange_start global attribute. wms_timeextent is not added")
+            logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
             continue
         if dim_name in 'time':
-            print("handle time")
+            logger.debug("handle time")
             _, diff_string, is_range = find_time_diff(ds, dim_name)
             if is_range:
                 start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
                 layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
             else:
-                print("Use time list.")
+                logger.debug("Use time list.")
                 time_list = []
                 for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
                     time_list.append(f"{str(d.data)}")
@@ -574,7 +577,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
 
-    print("ADDing vector at end")
+    logger.debug("ADDing vector at end")
 
     return True
 
@@ -586,11 +589,11 @@ def _find_dimensions(ds, actual_variable, variable, qp):
             continue
         for _dim_name in [dim_name, f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
-                print(f"Can not have a dimension name height as this will conflict with query parameter HEIGHT as the size in image.")
+                logger.debug(f"Can not have a dimension name height as this will conflict with query parameter HEIGHT as the size in image.")
                 _dim_name = _dim_name + '_dimension'
-            print(f"search for dim_name {_dim_name} in query parameters.")
+            logger.debug(f"search for dim_name {_dim_name} in query parameters.")
             if _dim_name in qp:
-                print(f"Found dimension {_dim_name} in request")
+                logger.debug(f"Found dimension {_dim_name} in request")
                 if dim_name == 'time':
                     _ds = {}
                     _ds['dim_name'] = dim_name
@@ -598,36 +601,36 @@ def _find_dimensions(ds, actual_variable, variable, qp):
                     requested_dimensions = datetime.datetime.strptime(qp[_dim_name], "%Y-%m-%dT%H:%M:%SZ")
                     time_as_band = 0
                     for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                        print(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                        logger.debug(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
                         if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                            print(d,requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'), requested_dimensions.timestamp())
+                            logger.debug(f"{d} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
                             break
                         time_as_band += 1
                     else:
-                        print("could not find a mathcing dimension value.")
+                        logger.debug("could not find a mathcing dimension value.")
                         raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
                 else:
-                    print(f"other dimension {dim_name}")
+                    logger.debug(f"other dimension {dim_name}")
                     _ds = {}
                     _ds['dim_name'] = dim_name
                     _ds['ds_size'] = ds[dim_name].data.size
                     selected_band_no = 0
                     for d in ds[dim_name].data:
-                        print(f"compare dim value {d} to req value {qp[_dim_name]}")
+                        logger.debug(f"compare dim value {d} to req value {qp[_dim_name]}")
                         if float(d) == float(qp[_dim_name]):
                             break
                         selected_band_no += 1
                     else:
-                        print("could not find a mathcing dimension value.")
+                        logger.debug("could not find a mathcing dimension value.")
                         raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = selected_band_no
                     dimension_search.append(_ds)
                 break
             else:
                 if ds[dim_name].data.size == 1:
-                    print(f"Dimension with size 0 {dim_name}")
+                    logger.debug(f"Dimension with size 0 {dim_name}")
                     _ds = {}
                     _ds['dim_name'] = dim_name
                     _ds['ds_size'] = ds[dim_name].data.size
@@ -635,13 +638,13 @@ def _find_dimensions(ds, actual_variable, variable, qp):
                     dimension_search.append(_ds)
                     break
         else:
-            print(f"Could not find {_dim_name}. Make some ugly assumption")
+            logger.debug(f"Could not find {_dim_name}. Make some ugly assumption")
             _ds = {}
             _ds['dim_name'] = dim_name
             _ds['ds_size'] = ds[dim_name].data.size
             _ds['selected_band_number'] = 0
             dimension_search.append(_ds)
-    print(dimension_search)
+    logger.debug(f"{dimension_search}")
     return dimension_search
 
 def _calc_band_number_from_dimensions(dimension_search):
@@ -656,7 +659,7 @@ def _calc_band_number_from_dimensions(dimension_search):
         first = False
         prev_ds = _ds
 
-    print(f"selected band number {band_number}")
+    logger.debug(f"selected band number {band_number}")
     return band_number
 
 def _add_wind_barb(map_obj, layer, colour_tripplet, min, max):
@@ -712,12 +715,12 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
     except KeyError:
         style = qp['style']
     if (variable.endswith("_vector") or variable.endswith("_vector_from_direction_and_speed")) and style == "":
-        print("Empty style. Force wind barbs.")
+        logger.debug("Empty style. Force wind barbs.")
         style = "Wind_barbs"
     elif style == "":
-        print("Empty style. Force raster.")
+        logger.debug("Empty style. Force raster.")
         style = 'raster'
-    print(f"Selected style: {style}")
+    logger.debug(f"Selected style: {style}")
     actual_variable = variable
     #if style in 'contour': #variable.endswith('_contour'):
     #    actual_variable = '_'.join(variable.split("_")[:-1])
@@ -726,13 +729,13 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         actual_y_variable = '_'.join(['y'] + variable.split("_")[:-1])
         vector_variable_name = variable
         actual_variable = actual_x_variable
-        print("VECTOR", vector_variable_name, actual_x_variable, actual_y_variable)
+        logger.debug(f"VECTOR {vector_variable_name} {actual_x_variable} {actual_y_variable}")
     if variable.endswith("_vector_from_direction_and_speed"):
         actual_x_variable = 'wind_speed'  # Not accurate, used to find crs and other proj info
         actual_y_variable = 'wind_direction'  # Not accurate, used to find crs and other proj info
         vector_variable_name = variable
         actual_variable = actual_x_variable
-        print("VECTOR", vector_variable_name, actual_x_variable, actual_y_variable)
+        logger.debug(f"VECTOR {vector_variable_name} {actual_x_variable} {actual_y_variable}")
 
     grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
 
@@ -761,23 +764,23 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             try:
                 scale_factor = ds['wind_speed'].attrs['scale_factor']
             except KeyError:
-                print("No scale_factor in attrs, Use 1.")
+                logger.debug("No scale_factor in attrs, Use 1.")
                 scale_factor = 1.
             try:
                 add_offset = ds['wind_speed'].attrs['add_offset']
             except KeyError:
-                print("No add_offset in attrs. Use 0.")
+                logger.debug("No add_offset in attrs. Use 0.")
                 add_offset = 0.
             speed = ds['wind_speed'] * scale_factor + add_offset
             try:
                 scale_factor = ds['wind_direction'].attrs['scale_factor']
             except KeyError:
-                print("No scale_factor in attrs. Use 1.")
+                logger.debug("No scale_factor in attrs. Use 1.")
                 scale_factor = 1.
             try:
                 add_offset = ds['wind_direction'].attrs['add_offset']
             except KeyError:
-                print("No add_offset in attrs. Use 0.")
+                logger.debug("No add_offset in attrs. Use 0.")
                 add_offset = 0.
             from_direction = ds['wind_direction'] * scale_factor + add_offset
         else:
@@ -785,24 +788,24 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                                ds[actual_y_variable],
                                f'{standard_name_prefix}_speed')
         # te = time.time()
-        # print("_get_speed ", te - ts)
+        # logger.debug(f"_get_speed {te - ts}")
         # ts = time.time()
             from_direction = _get_from_direction(ds[actual_x_variable],
                                                  ds[actual_y_variable],
                                                  f'{standard_name_prefix}_from_direction')
         # te = time.time()
-        # print("_from_direction ", te - ts)
+        # logger.debug(f"_from_direction {te - ts}")
         # ts = time.time()
 
             try:
-                print("EPSG CRS:",qp['crs'])
+                logger.debug(f"EPSG CRS: {qp['crs']}")
                 requested_epsg = int(qp['crs'].split(':')[-1])
             except KeyError:
                 requested_epsg = 4326
-            print(requested_epsg)
+            logger.debug(f"{requested_epsg}")
             # Rotate wind direction, so it relates to the north pole, rather than to the grid's y direction.            
             unique_dataset_string = generate_unique_dataset_string(ds, actual_x_variable, requested_epsg)
-            print("UNIQUE DS STRING", unique_dataset_string)
+            logger.debug(f"UNIQUE DS STRING {unique_dataset_string}")
             if unique_dataset_string in wind_rotation_cache:
                 north = wind_rotation_cache[unique_dataset_string]
             else:
@@ -810,11 +813,11 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                 wind_rotation_cache[unique_dataset_string] = north
             # north = _get_north(actual_x_variable, ds, requested_epsg)
             # te = time.time()
-            # print("_get_north ", te - ts) 
+            # logger.debug(f"_get_north {te - ts}")
             # ts = time.time()
             _rotate_relative_to_north(from_direction, north)
             # te = time.time()
-            # print("_relative_to_north ", te - ts)
+            # logger.debug(f"_relative_to_north {te - ts}")
             # ts = time.time()
 
         new_x = np.cos((90. - from_direction - 180) * np.pi/180) * speed
@@ -825,7 +828,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             new_y.attrs['grid_mapping'] = ds[actual_y_variable].attrs['grid_mapping']
             ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']]
         except KeyError:
-            print("No grid mapping in dataset. Try use calculate.")
+            logger.debug("No grid mapping in dataset. Try use calculate.")
             if grid_mapping_name == 'calculated_omerc':
                 from pyresample import geometry, kd_tree
                 swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
@@ -869,13 +872,13 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             ds_xy['y'].attrs['units'] = "m"
         else:
             try:
-                print("Droping vars:", new_x.dims, len(new_x.dims))
+                logger.debug(f"Droping vars: {new_x.dims} {len(new_x.dims)}")
                 if len(new_x.dims) == 2:
                     ds_xy[actual_x_variable] = new_x
                 else:
                     ds_xy[actual_x_variable] = new_x.drop_vars(['latitude', 'longitude'])
             except ValueError:
-                print("Failing drop vars")
+                logger.debug("Failing drop vars")
                 ds_xy[actual_x_variable] = new_x
             try:
                 if len(new_y.dims) == 2:
@@ -885,22 +888,22 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             except ValueError:
                 ds_xy[actual_y_variable] = new_y
         # te = time.time()
-        # print("new dataset ", te - ts)
+        # logger.debug(f"new dataset {te - ts}")
         # ts = time.time()
-        # print("GRid mapping", new_x.attrs['grid_mapping'])
-        # print(ds_xy)
+        # logger.debug(f"GRid mapping {new_x.attrs['grid_mapping']}")
+        # logger.debug(f"{ds_xy}")
         # for netcdfs in glob.glob(os.path.join(_get_mapfiles_path(product_config), "netcdf-*")):
         #     shutil.rmtree(netcdfs)
         tmp_netcdf = os.path.join(tempfile.mkdtemp(prefix='netcdf-', dir=_get_mapfiles_path(product_config)),
                                   f"xy-{actual_x_variable}-{actual_y_variable}.nc")
         ds_xy.to_netcdf(tmp_netcdf)
-        print(tmp_netcdf)
+        logger.debug(f"{tmp_netcdf}")
         # for vrts in glob.glob(os.path.join(_get_mapfiles_path(product_config), "vrt-*")):
         #     shutil.rmtree(vrts)
 
         xvar_vrt_filename = os.path.join(tempfile.mkdtemp(prefix='vrt-', dir=_get_mapfiles_path(product_config)),
                                          f"xvar-{actual_x_variable}-1.vrt")
-        print(xvar_vrt_filename)
+        logger.debug(f"{xvar_vrt_filename}")
         gdal.BuildVRT(xvar_vrt_filename,
                     [f'NETCDF:{tmp_netcdf}:{actual_x_variable}'],
                     **{'bandList': [1]})
@@ -916,10 +919,10 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                      #[xvar_vrt_filename, yvar_vrt_filename],
                      **{'bandList': [1], 'separate': True})
         # te = time.time()
-        # print("save and create vrts ", te - ts) 
+        # logger.debug(f"save and create vrts {te - ts}")
         layer.data = variable_file_vrt
     elif netcdf_file.endswith('ncml'):
-        print("Must find netcdf file for data")
+        logger.debug("Must find netcdf file for data")
         from lxml import etree
         try:
             ncml_netcdf_files = []
@@ -928,12 +931,12 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                 ncml_netcdf_files.append(f.attrib['location'])
             layer.data = f'NETCDF:{ncml_netcdf_files[dimension_search[0]["selected_band_number"]]}:{actual_variable}'
         except FileNotFoundError:
-            print(f"Could not find the ncml xml input file {netcdf_file}.")
+            logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")
         except Exception:
             raise HTTPException(status_code=500, detail=f"Failed to parse ncml file to find individual file.")
 
     elif grid_mapping_name == 'calculated_omerc':
-        print("Try to resample data on the fly and using gdal vsimem.")
+        logger.debug("Try to resample data on the fly and using gdal vsimem.")
         from pyresample import kd_tree, geometry
         swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
         optimal_bb_area = swath_def.compute_optimal_bb_area()
@@ -964,7 +967,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         layer.data = f'NETCDF:{netcdf_file}:{actual_variable}'
 
     if style in 'contour':
-        print("Style in contour for config")
+        logger.debug("Style in contour for config")
         layer.type = mapscript.MS_LAYER_LINE
         layer.setConnectionType(mapscript.MS_CONTOUR, "")
         interval = 1000
@@ -986,7 +989,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                 interval = 2.5
                 smoothsia = 0.25
             else:
-                print(f"Unknown unit: {ds[actual_variable].attrs['units']}. contour interval may be of for {actual_variable}.")
+                logger.debug(f"Unknown unit: {ds[actual_variable].attrs['units']}. contour interval may be of for {actual_variable}.")
         except KeyError:
             pass
         layer.setProcessingKey('CONTOUR_INTERVAL', f'{interval}')
@@ -1011,7 +1014,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         optimal_bb_area = None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
-    print(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
+    logger.debug(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
 
 
@@ -1060,7 +1063,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             _style.setSymbolByName(map_obj, "vector_arrow")
             #layer.setProcessingKey('UV_SIZE_SCALE', '2')
         else:
-            print(f"Unknown style {style}. Check your request.")
+            logger.debug(f"Unknown style {style}. Check your request.")
 
         try:
             uv_spacing = qp['spacing']
@@ -1073,25 +1076,25 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
 
     else:
         if len(dimension_search) == 1:
-            print("Len 1")
+            logger.debug("Len 1")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
         elif len(dimension_search) == 2:
-            print("Len 2 of ", actual_variable)
+            logger.debug(f"Len 2 of {actual_variable}")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
         # Find which band
         elif len(dimension_search) == 3:
-            print("Len 3")
+            logger.debug("Len 3")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
         elif not dimension_search:
-            print("Dimension search empty. Possible calculated field.")
+            logger.debug("Dimension search empty. Possible calculated field.")
 
-        print("MIN:MAX ",min_val, max_val)
+        logger.debug(f"MIN:MAX {min_val} {max_val}")
         #Grayscale
         if style in 'contour': #variable.endswith('_contour'):
-            print("Style in contour for style setup.")
+            logger.debug("Style in contour for style setup.")
             layer.labelitem = 'contour'
             s = mapscript.classObj(layer)
             s.name = "contour"
@@ -1114,12 +1117,12 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                 elif ds[actual_variable].attrs['units'] == 'm/s':
                     label_scaling = 1
                 else:
-                    print(f"Unknown unit: {ds[actual_variable].attrs['units']}. Label scaling may be of for {actual_variable}.")
-                print(f"Selected label scale {label_scaling} and offset {label_offset}")
+                    logger.debug(f"Unknown unit: {ds[actual_variable].attrs['units']}. Label scaling may be of for {actual_variable}.")
+                logger.debug(f"Selected label scale {label_scaling} and offset {label_offset}")
             except KeyError:
                 pass
             label.setText(f'(tostring(({label_offset}+[contour]/{label_scaling}),"%.0f"))')
-            print(label.convertToString())
+            logger.debug(f"{label.convertToString()}")
             label.color = mapscript.colorObj(red=0, green=0, blue=255)
             #label.font = 'sans'
             # TYPE truetype
@@ -1141,7 +1144,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
                 _style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
                 _style.minvalue = float(min_val)
                 _style.maxvalue = float(max_val)
-            print(f"After comolrmap min max {min_val} {max_val}")
+            logger.debug(f"After comolrmap min max {min_val} {max_val}")
 
     return actual_variable
 
@@ -1149,36 +1152,36 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
     import importlib
     return_val = False
     try:
-        print(f"module to load {ds[actual_variable].colormap.split('.')[0]}")
+        logger.debug(f"module to load {ds[actual_variable].colormap.split('.')[0]}")
         loaded_module = importlib.import_module(ds[actual_variable].colormap.split(".")[0])
         cm = getattr(loaded_module, 'cm')
         tools = getattr(loaded_module, 'tools')
         colormap = getattr(cm, ds[actual_variable].colormap.split(".")[-1])
         colormap_dict = tools.get_dict(colormap, N=32)
     except ModuleNotFoundError:
-        print(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
+        logger.debug(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
     except AttributeError as ae:
-        print(f"Attribute not found: {str(ae)}")
+        logger.debug(f"Attribute not found: {str(ae)}")
     except Exception:
         raise
     try:
         minmax = ds[actual_variable].minmax.split(' ')
         min_val = float(minmax[0])
         max_val = float(minmax[1])
-        print(f"Using from minmax min max {min_val} {max_val}")
+        logger.debug(f"Using from minmax min max {min_val} {max_val}")
         if set_scale_processing_key:
-            print("Setting mapserver processing scale and buckets")
+            logger.debug("Setting mapserver processing scale and buckets")
             layer.setProcessingKey('SCALE', f'{min_val:0.1f},{max_val:0.1f}')
             layer.setProcessingKey('SCALE_BUCKETS', '32')
     except AttributeError as ae:
-        print(f"Attribute not found: {str(ae)}. Using calculated min max.")
-        print(f"Using from calculation min max {min_val} {max_val}")
+        logger.debug(f"Attribute not found: {str(ae)}. Using calculated min max.")
+        logger.debug(f"Using from calculation min max {min_val} {max_val}")
     except Exception:
         raise
     try:
         units = ds[actual_variable].units
     except AttributeError as ae:
-        print(f"Attribute not found: {str(ae)}. No units.")
+        logger.debug(f"Attribute not found: {str(ae)}. No units.")
         units = ""
     try:
         vals = np.linspace(min_val, max_val, num=33)
@@ -1197,7 +1200,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
             index += 1
         return_val = True
     except AttributeError as ae:
-        print(f"Attribute not found: {str(ae)}")
+        logger.debug(f"Attribute not found: {str(ae)}")
     except Exception:
         raise
 
@@ -1240,10 +1243,10 @@ def _parse_filename(netcdf_path, product_config):
     pattern = re.compile(pattern_match)
     mtchs = pattern.match(netcdf_path)
     if mtchs:
-        print("Pattern match:", mtchs.groups())
+        logger.debug(f"Pattern match: {mtchs.groups()}")
         return mtchs.groups()
     else:
-        print("No match: ", netcdf_path)
+        logger.debug(f"No match: {netcdf_path}")
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _get_mapfiles_path(regexp_pattern_module):
