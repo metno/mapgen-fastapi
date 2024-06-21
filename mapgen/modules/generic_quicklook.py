@@ -427,20 +427,24 @@ async def generic_quicklook(netcdf_path: str,
 async def clean_data(map_object, actual_variable):
     logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
     for layer in range(map_object.numlayers):
-        for cls in range(map_object.getLayer(layer).numclasses):
-            try:
-                for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
-                    ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
-                    del ref
-                    ref = None
-            except AttributeError:
-                pass
-            ref = map_object.getLayer(layer).removeClass(0)
-            del ref
-            ref = None
+        try:
+            for cls in range(map_object.getLayer(layer).numclasses):
+                try:
+                    for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
+                        ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                        del ref
+                        ref = None
+                except AttributeError:
+                    pass
+                ref = map_object.getLayer(layer).removeClass(0)
+                del ref
+                ref = None
+        except AttributeError:
+            pass
         ref = map_object.removeLayer(layer)
         del ref
         ref = None
-    gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
+    if os.path.exists(f'/vsimem/in_memory_output_{actual_variable}.tif'):
+        gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
     del map_object
     map_object = None

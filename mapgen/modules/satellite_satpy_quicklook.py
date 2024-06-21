@@ -207,6 +207,16 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
             key = _generate_key(start_time, f['satpy_product_filename'])
             s3_client.upload_file(os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename']), f['bucket'], key)
             s3_client.put_object_acl(Bucket=f['bucket'], Key=key, ACL='public-read')
+            response = s3_client.head_object(Bucket=f['bucket'], Key=key)
+            if response['ContentLength'] == 0:
+                logger.error(f"object {f['bucket']}/{key} has size 0 after upload. This will cause problems. Deleting...")
+                delete_response = s3_client.delete_object(Bucket=f['bucket'], Key=key)
+                if delete_response['DeleteMarker']:
+                    logger.error(f"object {f['bucket']}/{key} with size 0 has been deleted.")
+                else:
+                    logger.error(f"object {f['bucket']}/{key} failed to be deleted.")
+            else:
+                logger.debug(f"Successfully uploaded object {f['bucket']}/{key} with size {response['ContentLength']} bytes.")
             os.remove(os.path.join(product_config.get('geotiff_tmp'), f['satpy_product_filename']))
     except Exception as e:
         logger.debug(f"Failed to upload file to s3 {str(e)}")
@@ -227,7 +237,7 @@ def _exists_on_ceph(satpy_product, start_time):
                         aws_secret_access_key=os.environ['S3_SECRET_KEY'])
 
     try:
-        logger.debug(f"Generate key ...")
+        logger.debug(f"Generate ceph bucket/prefix(object) key ...")
         key = _generate_key(start_time, satpy_product['satpy_product_filename'])
         logger.debug(f"load object ...")
         s3.Object(satpy_product['bucket'], key).load()
@@ -242,6 +252,9 @@ def _exists_on_ceph(satpy_product, start_time):
         # The object does exist.
         logger.debug(f"Already on object store")
         exists = True
+    finally:
+        del s3
+        s3 = None
     return exists
 
 async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
@@ -281,13 +294,17 @@ async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, star
             tmp_satpy_product_filename = '.' + _satpy_product['satpy_product_filename']
             resample_scene.save_dataset(_satpy_product['satpy_product'], filename=os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename))
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)):
-                os.rename(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename),
-                          os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename']))
+                if not os.stat(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)).st_size:
+                    logger.warning(f"file size 0 {os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)}. Removing.")
+                    os.remove(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename))
+                else:
+                    os.rename(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename),
+                            os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename']))
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
                 products_to_upload_to_ceph.append(_satpy_product)
     logger.debug(f"After save {str(products_to_upload_to_ceph)}")
     return_val = True
-    if not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time, product_config):
+    if not products_to_upload_to_ceph or not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time, product_config):
         return_val = False
     swath_scene.unload()
     resample_scene.unload()

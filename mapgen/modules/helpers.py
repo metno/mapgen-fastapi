@@ -134,6 +134,7 @@ async def handle_request(map_object, full_request):
                                 detail=f"mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
         result = mapscript.msIO_getStdoutBufferBytes()
+        mapscript.msIO_resetHandlers()
     else:
         mapscript.msIO_installStdoutToBuffer()
         dispatch_status = map_object.OWSDispatch(ows_req)
@@ -147,6 +148,7 @@ async def handle_request(map_object, full_request):
             content_type = 'text/xml'
         dom = xml.dom.minidom.parseString(_result)
         result = dom.toprettyxml(indent="", newl="")
+        mapscript.msIO_resetHandlers()
     return Response(result, media_type=content_type)
 
 #from typing import Optional
@@ -1160,8 +1162,10 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
         colormap_dict = tools.get_dict(colormap, N=32)
     except ModuleNotFoundError:
         logger.debug(f"Module {ds[actual_variable].colormap} not found. Use build in default.")
+        return return_val, min_val, max_val
     except AttributeError as ae:
         logger.debug(f"Attribute not found: {str(ae)}")
+        return return_val, min_val, max_val
     except Exception:
         raise
     try:

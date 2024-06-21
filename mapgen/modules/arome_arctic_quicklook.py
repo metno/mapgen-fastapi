@@ -38,10 +38,11 @@ import os
 #import glob
 import time
 import pandas
+import logging
 #import shutil
 import datetime
 import mapscript
-from fastapi import Request, Query, HTTPException
+from fastapi import Request, Query, HTTPException, BackgroundTasks
 import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
@@ -50,6 +51,8 @@ from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapab
 grid_mapping_cache = {}
 wind_rotation_cache = {}
 summary_cache = {}
+
+logger = logging.getLogger(__name__)
 
 # def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, xr_dataset):
 #     """"Add all needed web metadata to the generated map file."""
@@ -252,6 +255,7 @@ summary_cache = {}
 
 async def arome_arctic_quicklook(netcdf_path: str,
                            full_request: Request,
+                           background_task: BackgroundTasks,
                            products: list = Query(default=[]),
                            product_config: dict = {}):
     netcdf_path = netcdf_path.replace("//", "/")
@@ -295,13 +299,15 @@ async def arome_arctic_quicklook(netcdf_path: str,
     logger.debug(f"QP: {qp}")
 
     map_object = None
+    actual_variable = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "WMS Arome Arctic.")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        if await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache):
+        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
         # Assume getcapabilities
@@ -327,6 +333,28 @@ async def arome_arctic_quicklook(netcdf_path: str,
 
     map_object.save(mapserver_map_file)
 
+    ds_disk.close()
+    # add background task
+    background_task.add_task(clean_data, map_object, actual_variable)
     # Handle the request and return results.
     return await handle_request(map_object, full_request)
 
+async def clean_data(map_object, actual_variable):
+    logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
+    for layer in range(map_object.numlayers):
+        for cls in range(map_object.getLayer(layer).numclasses):
+            try:
+                for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
+                    ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                    del ref
+                    ref = None
+            except AttributeError:
+                pass
+            ref = map_object.getLayer(layer).removeClass(0)
+            del ref
+            ref = None
+        ref = map_object.removeLayer(layer)
+        del ref
+        ref = None
+    del map_object
+    map_object = None
