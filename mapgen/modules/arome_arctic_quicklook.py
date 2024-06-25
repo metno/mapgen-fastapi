@@ -341,20 +341,26 @@ async def arome_arctic_quicklook(netcdf_path: str,
 
 async def clean_data(map_object, actual_variable):
     logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
-    for layer in range(map_object.numlayers):
-        for cls in range(map_object.getLayer(layer).numclasses):
+    try:
+        for layer in range(map_object.numlayers):
             try:
-                for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
-                    ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
+                for cls in range(map_object.getLayer(0).numclasses):
+                    try:
+                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
+                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
+                            del ref
+                            ref = None
+                    except AttributeError:
+                        pass
+                    ref = map_object.getLayer(0).removeClass(0)
                     del ref
                     ref = None
             except AttributeError:
                 pass
-            ref = map_object.getLayer(layer).removeClass(0)
+            ref = map_object.removeLayer(0)
             del ref
             ref = None
-        ref = map_object.removeLayer(layer)
-        del ref
-        ref = None
-    del map_object
-    map_object = None
+        del map_object
+        map_object = None
+    except AttributeError:
+        pass

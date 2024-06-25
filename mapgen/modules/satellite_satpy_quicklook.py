@@ -134,21 +134,29 @@ async def generate_satpy_quicklook(netcdf_path: str,
 
 async def clean_data(map_object):
     logger.debug(f"I need to clean some data to avoid memort stash")
-    logger.debug(f"{sys.getrefcount(map_object)}")
-    for layer in range(map_object.numlayers):
-        for cls in range(map_object.getLayer(layer).numclasses):
-            for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
-                ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
-                del ref
-                ref = None
-            ref = map_object.getLayer(layer).removeClass(0)
+    try:
+        for layer in range(map_object.numlayers):
+            try:
+                for cls in range(map_object.getLayer(0).numclasses):
+                    try:
+                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
+                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
+                            del ref
+                            ref = None
+                    except AttributeError:
+                        pass
+                    ref = map_object.getLayer(0).removeClass(0)
+                    del ref
+                    ref = None
+            except AttributeError:
+                pass
+            ref = map_object.removeLayer(0)
             del ref
             ref = None
-        ref = map_object.removeLayer(layer)
-        del ref
-        ref = None
-    del map_object
-    map_object = None
+        del map_object
+        map_object = None
+    except AttributeError:
+        pass
 
 async def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
@@ -292,7 +300,12 @@ async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, star
     for _satpy_product in satpy_products_to_generate:
         if _satpy_product['satpy_product'] in satpy_products:
             tmp_satpy_product_filename = '.' + _satpy_product['satpy_product_filename']
-            resample_scene.save_dataset(_satpy_product['satpy_product'], filename=os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename))
+            resample_scene.save_dataset(_satpy_product['satpy_product'],
+                                        filename=os.path.join(product_config.get('geotiff_tmp'),
+                                                              tmp_satpy_product_filename),
+                                        tiled=True,
+                                        blockxsize=256, blockysize=256,
+                                        overviews=[2, 4, 8, 16])
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)):
                 if not os.stat(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)).st_size:
                     logger.warning(f"file size 0 {os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)}. Removing.")

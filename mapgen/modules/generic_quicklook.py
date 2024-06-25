@@ -281,6 +281,8 @@ async def generic_quicklook(netcdf_path: str,
             is_ncml = True
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Can not open file. Either not existing or ncml file: {e}")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail=f"File Not Found: {orig_netcdf_path}")
 
     # variables = list(ds_disk.keys())
 
@@ -426,25 +428,28 @@ async def generic_quicklook(netcdf_path: str,
 
 async def clean_data(map_object, actual_variable):
     logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
-    for layer in range(map_object.numlayers):
-        try:
-            for cls in range(map_object.getLayer(layer).numclasses):
-                try:
-                    for sty in range(map_object.getLayer(layer).getClass(cls).numstyles):
-                        ref = map_object.getLayer(layer).getClass(cls).removeStyle(0)
-                        del ref
-                        ref = None
-                except AttributeError:
-                    pass
-                ref = map_object.getLayer(layer).removeClass(0)
-                del ref
-                ref = None
-        except AttributeError:
-            pass
-        ref = map_object.removeLayer(layer)
-        del ref
-        ref = None
-    if os.path.exists(f'/vsimem/in_memory_output_{actual_variable}.tif'):
-        gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
-    del map_object
-    map_object = None
+    try:
+        for layer in range(map_object.numlayers):
+            try:
+                for cls in range(map_object.getLayer(0).numclasses):
+                    try:
+                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
+                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
+                            del ref
+                            ref = None
+                    except AttributeError:
+                        pass
+                    ref = map_object.getLayer(0).removeClass(0)
+                    del ref
+                    ref = None
+            except AttributeError:
+                pass
+            ref = map_object.removeLayer(0)
+            del ref
+            ref = None
+        if os.path.exists(f'/vsimem/in_memory_output_{actual_variable}.tif'):
+            gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
+        del map_object
+        map_object = None
+    except AttributeError:
+        pass
