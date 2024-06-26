@@ -265,9 +265,11 @@ async def generic_quicklook(netcdf_path: str,
             netcdf_path = netcdf_path[1:]
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
+        logger.error(f"status_code=500, Missing base dir in server config.")
         raise HTTPException(status_code=500, detail="Missing base dir in server config.")
 
     if not netcdf_path:
+        logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
         raise HTTPException(status_code=404, detail="Missing netcdf path")
 
     # Read all variables names from the netcdf file.
@@ -280,9 +282,11 @@ async def generic_quicklook(netcdf_path: str,
             ds_disk = xncml.open_ncml(netcdf_path)
             is_ncml = True
         except Exception as e:
+            logger.error(f"status_code=500, Can not open file. Either not existing or ncml file: {e}")
             raise HTTPException(status_code=500, detail=f"Can not open file. Either not existing or ncml file: {e}")
     except FileNotFoundError:
-        raise HTTPException(status_code=500, detail=f"File Not Found: {orig_netcdf_path}")
+        logger.error(f"status_code=500, File Not Found: {orig_netcdf_path}.")
+        raise HTTPException(status_code=500, detail=f"File Not Found: {orig_netcdf_path}.")
 
     # variables = list(ds_disk.keys())
 
@@ -293,6 +297,7 @@ async def generic_quicklook(netcdf_path: str,
                 if ds_disk['forecast_reference_time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
                     forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
                 else:
+                    logger.error(f"status_code=500, This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}.")
                     raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
             try:
                 logger.debug(f"{ds_disk['time'].dt}")
@@ -301,7 +306,7 @@ async def generic_quicklook(netcdf_path: str,
                     ds_disk['time'] = pandas.TimedeltaIndex(ds_disk['time'], unit='s') + datetime.datetime(1970, 1, 1)
                     ds_disk['time'] = pandas.to_datetime(ds_disk['time'])
                 else:
-                    logger.debug(f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
+                    logger.error(f"status_code=500, This unit is not implemented: {ds_disk['time'].attrs['units']}.")
                     raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
 
         else:
@@ -416,6 +421,9 @@ async def generic_quicklook(netcdf_path: str,
 
     if layer_no == 0 and not map_object:
         logger.debug(f"No layers {layer_no} or no map_object {map_object}")
+        logger.error(f"status_code=500, Could not find any variables to turn into OGC WMS layers. One "
+                     "reason can be your data does not have a valid grid_mapping (Please see CF "
+                     "grid_mapping), or internal resampling failed.")
         raise HTTPException(status_code=500, detail=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
                                                      "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 

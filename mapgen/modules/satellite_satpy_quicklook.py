@@ -81,9 +81,11 @@ async def generate_satpy_quicklook(netcdf_path: str,
             netcdf_path = netcdf_path[1:]
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
+        logger.error(f"status_code=500, Missing base dir in server config.")
         raise HTTPException(status_code=500, detail="Missing base dir in server config.")
 
     if not netcdf_path:
+        logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     logger.debug(f"{satpy_products}")
 
@@ -112,9 +114,11 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     try:
         if not await _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
+            logger.error(f"status_code=500, Some part of the generate failed.")
             raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
+            logger.error(f"status_code=500, Layer can not be made for this dataset {str(ke)}")
             raise HTTPException(status_code=500, detail=f"Layer can not be made for this dataset {str(ke)}")
 
     map_object = mapscript.mapObj()
@@ -230,6 +234,7 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
         logger.debug(f"Failed to upload file to s3 {str(e)}")
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
+        logger.error(f"status_code=500, Failed to upload file to s3.")
         raise HTTPException(status_code=500, detail="Failed to upload file to s3.")
     finally:
         s3_client.close()
@@ -344,6 +349,7 @@ def _parse_filename(netcdf_path, product_config):
         return mtchs.groups()
     else:
         logger.debug(f"No match: {netcdf_path}")
+        logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 async def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):

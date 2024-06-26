@@ -81,8 +81,10 @@ def find_config_for_this_netcdf(netcdf_path):
             logger.debug(f"Exception in the netcdf_path match part with {str(e)}")
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
+            logger.error(f"status_code=500, Exception raised when regexp. Check the config.")
             raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
     if not regexp_pattern_module:
+        logger.error(f"status_code=501, The server have no setup to handle the requested file {netcdf_path}. Check with the maintainer if this could be added.")
         raise HTTPException(status_code=501, detail=f"The server have no setup to handle the requested file {netcdf_path}. Check with the maintainer if this could be added.")
 
     return regexp_pattern_module
@@ -97,6 +99,7 @@ async def handle_request(map_object, full_request):
         full_request_string = full_request_string.replace("&amp%3B", "&")
         logger.debug(f"HER {full_request_string}")
     except Exception as e:
+        logger.error(f"status_code=500, failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
         raise HTTPException(status_code=500,
                             detail=f"failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
     try:
@@ -130,6 +133,7 @@ async def handle_request(map_object, full_request):
         try:
             map_object.OWSDispatch( ows_req )
         except Exception as e:
+            logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
             raise HTTPException(status_code=500,
                                 detail=f"mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
@@ -149,7 +153,8 @@ async def handle_request(map_object, full_request):
         dom = xml.dom.minidom.parseString(_result)
         result = dom.toprettyxml(indent="", newl="")
         mapscript.msIO_resetHandlers()
-    return Response(result, media_type=content_type)
+    logger.info(f"status_code=200, mapscript return successfully.")
+    return Response(result, status_code=200, media_type=content_type)
 
 #from typing import Optional
 #from . import _util
@@ -609,7 +614,7 @@ def _find_dimensions(ds, actual_variable, variable, qp):
                             break
                         time_as_band += 1
                     else:
-                        logger.debug("could not find a mathcing dimension value.")
+                        logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                         raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
@@ -625,7 +630,7 @@ def _find_dimensions(ds, actual_variable, variable, qp):
                             break
                         selected_band_no += 1
                     else:
-                        logger.debug("could not find a mathcing dimension value.")
+                        logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                         raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = selected_band_no
                     dimension_search.append(_ds)
@@ -935,6 +940,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         except FileNotFoundError:
             logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")
         except Exception:
+            logger.error(f"status_code=500, Failed to parse ncml file to find individual file.")
             raise HTTPException(status_code=500, detail=f"Failed to parse ncml file to find individual file.")
 
     elif grid_mapping_name == 'calculated_omerc':
@@ -1250,7 +1256,7 @@ def _parse_filename(netcdf_path, product_config):
         logger.debug(f"Pattern match: {mtchs.groups()}")
         return mtchs.groups()
     else:
-        logger.debug(f"No match: {netcdf_path}")
+        logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
         raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _get_mapfiles_path(regexp_pattern_module):

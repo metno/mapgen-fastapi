@@ -265,11 +265,14 @@ async def arome_arctic_quicklook(netcdf_path: str,
             netcdf_path = netcdf_path[1:]
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
+        logger.error(f"status_code=500, Missing base dir in server config.")
         raise HTTPException(status_code=500, detail="Missing base dir in server config.")
 
     if not netcdf_path:
+        logger.error(f"status_code=404, Missing netcdf path")
         raise HTTPException(status_code=404, detail="Missing netcdf path")
     if not os.path.exists(netcdf_path):
+        logger.error(f"status_code=404, Could not find {orig_netcdf_path} in server configured directory.")
         raise HTTPException(status_code=404, detail=f"Could not find {orig_netcdf_path} in server configured directory.")
 
     ds_disk = xr.open_dataset(netcdf_path)
