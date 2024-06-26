@@ -34,3 +34,4 @@ dependencies:
 - metpy
 - lxml
 - cmocean
+- pyspectral
