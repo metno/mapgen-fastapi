@@ -300,6 +300,11 @@ async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, star
     for _satpy_product in satpy_products_to_generate:
         if _satpy_product['satpy_product'] in satpy_products:
             tmp_satpy_product_filename = '.' + _satpy_product['satpy_product_filename']
+            if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)):
+                logger.warning(f"File {os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename)} "
+                               "already exists locally. Probably after a previous failed generation. Need to delete "
+                               "this file before saving again.")
+                os.remove(os.path.join(product_config.get('geotiff_tmp'), tmp_satpy_product_filename))
             resample_scene.save_dataset(_satpy_product['satpy_product'],
                                         filename=os.path.join(product_config.get('geotiff_tmp'),
                                                               tmp_satpy_product_filename),
