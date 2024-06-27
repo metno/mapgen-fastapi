@@ -1130,7 +1130,6 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             except KeyError:
                 pass
             label.setText(f'(tostring(({label_offset}+[contour]/{label_scaling}),"%.0f"))')
-            logger.debug(f"{label.convertToString()}")
             label.color = mapscript.colorObj(red=0, green=0, blue=255)
             #label.font = 'sans'
             # TYPE truetype
@@ -1138,6 +1137,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             label.position = mapscript.MS_CC
             label.force = True
             label.angle = 0 #mapscript.MS_AUTO
+            logger.debug(f"{label.convertToString()}")
             s.addLabel(label)
         elif style == 'raster':
             cfa, min_val, max_val = _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key)
