@@ -47,6 +47,7 @@ import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
+from mapgen.modules.helpers import _parse_request
 
 grid_mapping_cache = {}
 wind_rotation_cache = {}
@@ -298,8 +299,7 @@ async def arome_arctic_quicklook(netcdf_path: str,
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
-    qp = {k.lower(): v for k, v in full_request.query_params.items()}
-    logger.debug(f"QP: {qp}")
+    qp = _parse_request(full_request)
 
     map_object = None
     actual_variable = None

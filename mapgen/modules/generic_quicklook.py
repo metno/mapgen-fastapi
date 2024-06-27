@@ -47,6 +47,7 @@ import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
+from mapgen.modules.helpers import _parse_request
 
 grid_mapping_cache = {}
 summary_cache = {}
@@ -375,8 +376,7 @@ async def generic_quicklook(netcdf_path: str,
     # symbol_obj.save(os.path.join(_get_mapfiles_path(product_config), "symbol.sym"))
     # map_object.setSymbolSet(os.path.join(_get_mapfiles_path(product_config),"symbol.sym"))
 
-    qp = {k.lower(): v for k, v in full_request.query_params.items()}
-    logger.debug(f"{qp}")
+    qp = _parse_request(full_request)
 
     layer_no = 0
     map_object = None

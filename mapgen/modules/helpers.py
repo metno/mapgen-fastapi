@@ -1264,3 +1264,10 @@ def _get_mapfiles_path(regexp_pattern_module):
         return regexp_pattern_module['mapfiles_path']
     except KeyError:
         return "./"
+
+def _parse_request(full_request):
+    qp = {k.lower(): v for k, v in full_request.query_params.items()}
+    logger.debug(f"QP: {qp}")
+    qp = {k.replace("amp;","") if k.startswith("amp;") else k:v for k,v in qp.items()}
+    logger.debug(f"QP after replace amp;: {qp}")
+    return qp
