@@ -325,6 +325,9 @@ async def arome_arctic_quicklook(netcdf_path: str,
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
             for variable in variables:
+                if variable in ['forecast_reference_time', 'p0', 'ap', 'b', 'projection_lambert']:
+                    logger.debug(f"Skipping variable or dimension: {variable}")
+                    continue
                 layer = mapscript.layerObj()
                 if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
                     layer_no = map_object.insertLayer(layer)
