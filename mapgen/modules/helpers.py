@@ -118,15 +118,25 @@ async def handle_request(map_object, full_request):
     logger.debug(f"NumParams {ows_req.NumParams}")
     logger.debug(f"TYPE {ows_req.type}")
     if ows_req.getValueByName('REQUEST') != 'GetCapabilities':
+        logger.debug(f"REQUEST is: {ows_req.getValueByName('REQUEST')}")
         mapscript.msIO_installStdoutToBuffer()
         try:
             _styles = str(ows_req.getValueByName("STYLES"))
+            logger.debug(f"STYLES: {_styles}")
             if _styles.lower() in 'contour':
                 ows_req.setParameter("STYLES", "")
             if _styles.lower() in 'wind_barbs':
                 ows_req.setParameter("STYLES", "")
             if _styles.lower() in 'vector':
                 ows_req.setParameter("STYLES", "")
+            _style = str(ows_req.getValueByName("STYLE"))
+            logger.debug(f"STYLE: {_style}")
+            if _style.lower() in 'contour':
+                ows_req.setParameter("STYLE", "")
+            if _style.lower() in 'wind_barbs':
+                ows_req.setParameter("STYLE", "")
+            if _style.lower() in 'vector':
+                ows_req.setParameter("STYLE", "")
         except TypeError:
             logger.debug("STYLES not in the request. Nothing to reset.")
             pass
@@ -416,7 +426,16 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
     layer.type = mapscript.MS_LAYER_RASTER
     layer.name = variable
-    layer.metadata.set("wms_title", variable)
+    wms_title = f"{variable}"
+    try:
+        wms_title += f": {ds[variable].attrs['long_name']}"
+    except (AttributeError, KeyError):
+        try:
+            wms_title += f": {ds[variable].attrs['short_name']}"
+        except (AttributeError, KeyError):
+            pass
+    logger.debug(f"wms_title {wms_title}")
+    layer.metadata.set("wms_title", f"{wms_title}")
 
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
@@ -1012,7 +1031,16 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
         layer.metadata.set("wms_title", '_'.join(variable.split("_")[:-1]))
     else:
-        layer.metadata.set("wms_title", variable)
+        wms_title = f"{variable}"
+        try:
+            wms_title += f": {ds[variable].attrs['long_name']}"
+        except (AttributeError, KeyError):
+            try:
+                wms_title += f": {ds[variable].attrs['short_name']}"
+            except (AttributeError, KeyError):
+                pass
+        logger.debug(f"wms_title {wms_title}")
+        layer.metadata.set("wms_title", f"{wms_title}")
     if grid_mapping_name == 'calculated_omerc':
         ll_x = optimal_bb_area.area_extent[0]
         ll_y = optimal_bb_area.area_extent[1]
