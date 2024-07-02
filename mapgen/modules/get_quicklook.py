@@ -21,9 +21,10 @@ import os
 import sys
 import logging
 
+from typing import Annotated
 from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 # from fastapi import Request, Query, APIRouter, status
-from fastapi import Request, APIRouter, Query, HTTPException, status, BackgroundTasks
+from fastapi import Request, APIRouter, Query, HTTPException, status, BackgroundTasks, Header
 
 from mapgen.modules.helpers import find_config_for_this_netcdf
 
@@ -39,10 +40,13 @@ logger = logging.getLogger(__name__)
 async def get_quicklook(netcdf_path: str,
                         full_request: Request,
                         background_tasks: BackgroundTasks,
-                        products: list = Query(default=[])):
+                        products: list = Query(default=[]),
+                        user_agent: Annotated[str | None, Header()] = None,
+                        origin: Annotated[str | None, Header()] = None):
     logger.debug(f"Request query_params: {str(full_request.query_params)}")
     logger.debug(f"Request url scheme: {full_request.url.scheme}")
     logger.debug(f"Request url netloc: {full_request.url.netloc}")
+    logger.debug(f"Headers: user_agent:{user_agent}, origin:{origin}")
     netcdf_path = netcdf_path.replace("//", "/")
     logger.debug(f'{netcdf_path}')
     if not netcdf_path:
