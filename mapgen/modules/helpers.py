@@ -97,7 +97,7 @@ async def handle_request(map_object, full_request):
         # Replace automatic inserted &amp; instead of plain &
         full_request_string = full_request_string.replace("&amp;", "&")
         full_request_string = full_request_string.replace("&amp%3B", "&")
-        logger.debug(f"HER {full_request_string}")
+        logger.debug(f"Full request string: {full_request_string}")
     except Exception as e:
         logger.error(f"status_code=500, failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
         raise HTTPException(status_code=500,
@@ -424,7 +424,7 @@ def _read_netcdfs_from_ncml(ncml_file):
         netcdf_paths.append(netcdf.get('location'))
     return netcdf_paths
 
-def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None):
+def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[]):
     """Generate getcapabilities for the netcdf file."""
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
@@ -475,18 +475,16 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             logger.debug("handle time")
             if netcdf_file.endswith('ncml'):
                 logger.debug("Need to handle ncml time from all files.")
-                netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
                 last_time = pd.to_datetime(last_ds['time'].data).to_pydatetime()
                 first_time = pd.to_datetime(ds['time'].data).to_pydatetime()
                 diff = (last_time-first_time)/(len(netcdf_files)-1)
-                print(f"DIFF {diff}")
                 if len(diff) == 1:
                     diff_string = _get_time_diff(diff[0])
                     start_time = first_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
                     end_time = last_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
                     layer.metadata.set("wms_timeextent", f'{start_time}/{end_time}/{diff_string}')
                 else:
-                    logger.error("Can not guess time diff in ncml")
+                    logger.error("Can not calucale wms timeextent in from ncml.")
             else:
                 _, diff_string, is_range = find_time_diff(ds, dim_name)
                 if is_range:
@@ -538,7 +536,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
 
     return True
 
-def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False):
+def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[]):
     """Generate getcapabilities for vector fiels for the netcdf file."""
     logger.debug("ADDING vector")
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
@@ -568,7 +566,10 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
     layer.type = mapscript.MS_LAYER_LINE
     layer.name = f'{vector_variable_name}_vector'
-    layer.metadata.set("wms_title", f'{vector_variable_name}')
+    try:
+        layer.metadata.set("wms_title", f'{vector_variable_name} vector from {x_variable} and {y_variable} component')
+    except UnboundLocalError:
+        layer.metadata.set("wms_title", f'{vector_variable_name} vector from x and y component')
     if direction_speed:
         layer.name = f'{vector_variable_name}_vector_from_direction_and_speed'
         layer.metadata.set("wms_title", f'{vector_variable_name} vector from direction and speed')
@@ -586,18 +587,31 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             continue
         if dim_name in 'time':
             logger.debug("handle time")
-            _, diff_string, is_range = find_time_diff(ds, dim_name)
-            if is_range:
-                start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
+            if netcdf_file.endswith('ncml'):
+                logger.debug("Need to handle ncml time from all files.")
+                last_time = pd.to_datetime(last_ds['time'].data).to_pydatetime()
+                first_time = pd.to_datetime(ds['time'].data).to_pydatetime()
+                diff = (last_time-first_time)/(len(netcdf_files)-1)
+                if len(diff) == 1:
+                    diff_string = _get_time_diff(diff[0])
+                    start_time = first_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
+                    end_time = last_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
+                    layer.metadata.set("wms_timeextent", f'{start_time}/{end_time}/{diff_string}')
+                else:
+                    logger.error("Can not calucale wms timeextent in from ncml.")
             else:
-                logger.debug("Use time list.")
-                time_list = []
-                for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                    time_list.append(f"{str(d.data)}")
-                start_time = time_list[0]
-                layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
+                _, diff_string, is_range = find_time_diff(ds, dim_name)
+                if is_range:
+                    start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                    end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                    layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
+                else:
+                    logger.debug("Use time list.")
+                    time_list = []
+                    for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                        time_list.append(f"{str(d.data)}")
+                    start_time = time_list[0]
+                    layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
             layer.metadata.set("wms_default", f'{start_time}')
         else:
             if ds[dim_name].data.size > 1:
@@ -845,10 +859,19 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
 
-        sel_dim = {}
-        for _ds in dimension_search:
-            sel_dim[_ds['dim_name']] = _ds['selected_band_number']
-        ds = ds.isel(**sel_dim)
+        if netcdf_file.endswith('ncml'):
+            logger.debug("Must find netcdf file for data")
+            try:
+                ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
+                logger.debug(f"Selected netcdf in list in ncml {ncml_netcdf_files[dimension_search[0]['selected_band_number']]}")
+                ds = xr.open_dataset(ncml_netcdf_files[dimension_search[0]["selected_band_number"]], mask_and_scale=False)
+            except Exception:
+                logger.error("Failed to find and opne correct dataset from ncml file.")
+        else:
+            sel_dim = {}
+            for _ds in dimension_search:
+                sel_dim[_ds['dim_name']] = _ds['selected_band_number']
+            ds = ds.isel(**sel_dim)
         # ts = time.time()
         standard_name_prefix = 'wind'
         if variable.endswith("_vector_from_direction_and_speed"):
