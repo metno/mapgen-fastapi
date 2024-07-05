@@ -644,7 +644,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
 
     return True
 
-def _find_dimensions(ds, actual_variable, variable, qp):
+def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
@@ -663,15 +663,30 @@ def _find_dimensions(ds, actual_variable, variable, qp):
                     _ds['ds_size'] = ds[dim_name].data.size
                     requested_dimensions = datetime.datetime.strptime(qp[_dim_name], "%Y-%m-%dT%H:%M:%SZ")
                     time_as_band = 0
-                    for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                        logger.debug(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
-                        if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                            logger.debug(f"{d} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
-                            break
-                        time_as_band += 1
+                    if last_ds and netcdf_file.endswith('ncml'):
+                        logger.debug("Must find netcdf file for data")
+                        ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
+                        last_time = pd.to_datetime(last_ds['time'].data).to_pydatetime()
+                        first_time = pd.to_datetime(ds['time'].data).to_pydatetime()
+                        diff = ((last_time-first_time)/(len(ncml_netcdf_files)-1))[0]
+                        time_stamp = first_time[0]
+                        for i in range(len(ncml_netcdf_files)):
+                            logger.debug(f"Checking {time_as_band} {time_stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                            if time_stamp == requested_dimensions:
+                                logger.debug(f"{time_stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
+                                break
+                            time_as_band += 1
+                            time_stamp += diff
                     else:
-                        logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
-                        raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                        for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                            logger.debug(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                            if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                                logger.debug(f"{d} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
+                                break
+                            time_as_band += 1
+                        else:
+                            logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                            raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
                 else:
@@ -768,7 +783,7 @@ def _add_wind_barb_100_150(map_obj, layer, colour_tripplet, min, max):
     style_base.setSymbolByName(map_obj, f"wind_barb_{min+2}")
     return
 
-async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache):
+async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache, last_ds=None):
     try:
         variable = qp['layer']
     except KeyError:
@@ -802,9 +817,22 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
 
     grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
 
-    dimension_search = _find_dimensions(ds, actual_variable, variable, qp)
-    if netcdf_file.endswith('ncml') or grid_mapping_name == 'calculated_omerc':
+    dimension_search = _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds)
+    if grid_mapping_name == 'calculated_omerc':
         band_number = 1
+    elif netcdf_file.endswith('ncml'):
+        band_number = 0
+        first = True
+        for _ds in dimension_search[::-1]:
+            if _ds['dim_name'] == 'time':
+                continue
+            if first:
+                band_number += _ds['selected_band_number'] + 1
+            else:
+                band_number += _ds['selected_band_number']*prev_ds['ds_size']
+            first = False
+            prev_ds = _ds
+        logger.debug(f"selected band number {band_number}")
     else:
         band_number = _calc_band_number_from_dimensions(dimension_search)
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
@@ -988,6 +1016,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         logger.debug("Must find netcdf file for data")
         try:
             ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
+            logger.debug(f"Selected netcdf in list in ncml {ncml_netcdf_files[dimension_search[0]['selected_band_number']]}")
             layer.data = f'NETCDF:{ncml_netcdf_files[dimension_search[0]["selected_band_number"]]}:{actual_variable}'
         except FileNotFoundError:
             logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")
@@ -1150,8 +1179,14 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
         elif len(dimension_search) == 2:
             logger.debug(f"Len 2 of {actual_variable}")
-            min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
-            max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            try:
+                min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+                max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+            except IndexError:
+                ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
+                with xr.open_dataset(ncml_netcdf_files[dimension_search[0]["selected_band_number"]], mask_and_scale=False) as ds_actual:
+                    min_val = np.nanmin(ds_actual[actual_variable][0,dimension_search[1]['selected_band_number'],:,:].data)
+                    max_val = np.nanmax(ds_actual[actual_variable][0,dimension_search[1]['selected_band_number'],:,:].data)
         # Find which band
         elif len(dimension_search) == 3:
             logger.debug("Len 3")

@@ -396,7 +396,7 @@ async def generic_quicklook(netcdf_path: str,
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "Generic netcdf WMS")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
