@@ -380,18 +380,22 @@ def find_time_diff(ds, dim_name):
                 prev_diff = diff
             prev = stamp
     if is_range:
-        if diff < datetime.timedelta(hours=1):
-            h = int(diff.seconds/60)
-            diff_string = f"PT{h}M"
-        elif diff < datetime.timedelta(hours=24):
-            h = int(diff.seconds/3600)
-            diff_string = f"PT{h}H"
-        else:
-            diff_string = f"P{diff.days}D"
+        diff_string = _get_time_diff(diff)
         logger.debug(f"DIFF STRING {diff_string}")
     else:
         logger.debug("Is not range")
     return diff,diff_string,is_range
+
+def _get_time_diff(diff):
+    if diff < datetime.timedelta(hours=1):
+        h = int(diff.seconds/60)
+        diff_string = f"PT{h}M"
+    elif diff < datetime.timedelta(hours=24):
+        h = int(diff.seconds/3600)
+        diff_string = f"PT{h}H"
+    else:
+        diff_string = f"P{diff.days}D"
+    return diff_string
 
 def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
     if 'latitude' in ds and 'longitude' in ds:
@@ -403,7 +407,24 @@ def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
         return optimal, grid_mapping_name
     raise KeyError
 
-def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file):
+def _read_netcdfs_from_ncml(ncml_file):
+    # ncml_netcdf_files = []
+    # xtree = etree.parse(netcdf_file)
+    # for f in xtree.findall(".//{http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2}netcdf"):
+    #     ncml_netcdf_files.append(f.attrib['location'])
+    # Parse the XML content
+    root = etree.parse(ncml_file).getroot()
+
+    # Define the namespace
+    ns = {'nc': 'http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2'}
+
+    # Find the 'netcdf' elements
+    netcdf_paths = []
+    for netcdf in root.xpath('//nc:netcdf/nc:aggregation/nc:netcdf', namespaces=ns):
+        netcdf_paths.append(netcdf.get('location'))
+    return netcdf_paths
+
+def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None):
     """Generate getcapabilities for the netcdf file."""
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
@@ -452,18 +473,33 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
             logger.debug("handle time")
-            _, diff_string, is_range = find_time_diff(ds, dim_name)
-            if is_range:
-                start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
-                layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
+            if netcdf_file.endswith('ncml'):
+                logger.debug("Need to handle ncml time from all files.")
+                netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
+                last_time = pd.to_datetime(last_ds['time'].data).to_pydatetime()
+                first_time = pd.to_datetime(ds['time'].data).to_pydatetime()
+                diff = (last_time-first_time)/(len(netcdf_files)-1)
+                print(f"DIFF {diff}")
+                if len(diff) == 1:
+                    diff_string = _get_time_diff(diff[0])
+                    start_time = first_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
+                    end_time = last_time[0].strftime('%Y-%m-%dT%H:%M:%SZ')
+                    layer.metadata.set("wms_timeextent", f'{start_time}/{end_time}/{diff_string}')
+                else:
+                    logger.error("Can not guess time diff in ncml")
             else:
-                logger.debug("Use time list.")
-                time_list = []
-                for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                    time_list.append(f"{str(d.data)}")
-                start_time = time_list[0]
-                layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
+                _, diff_string, is_range = find_time_diff(ds, dim_name)
+                if is_range:
+                    start_time = min(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                    end_time = max(ds[dim_name].dt.strftime('%Y-%m-%dT%H:%M:%SZ').data)
+                    layer.metadata.set("wms_timeextent", f'{start_time:}/{end_time}/{diff_string}')
+                else:
+                    logger.debug("Use time list.")
+                    time_list = []
+                    for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                        time_list.append(f"{str(d.data)}")
+                    start_time = time_list[0]
+                    layer.metadata.set("wms_timeextent", f'{",".join(time_list)}')
             layer.metadata.set("wms_default", f'{start_time}')
         else:
             if ds[dim_name].data.size > 1:
@@ -532,9 +568,10 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
     layer.type = mapscript.MS_LAYER_LINE
     layer.name = f'{vector_variable_name}_vector'
+    layer.metadata.set("wms_title", f'{vector_variable_name}')
     if direction_speed:
         layer.name = f'{vector_variable_name}_vector_from_direction_and_speed'
-    layer.metadata.set("wms_title", f'{vector_variable_name}')
+        layer.metadata.set("wms_title", f'{vector_variable_name} vector from direction and speed')
     layer.setConnectionType(mapscript.MS_CONTOUR, "")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
@@ -949,12 +986,8 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         layer.data = variable_file_vrt
     elif netcdf_file.endswith('ncml'):
         logger.debug("Must find netcdf file for data")
-        from lxml import etree
         try:
-            ncml_netcdf_files = []
-            xtree = etree.parse(netcdf_file)
-            for f in xtree.findall(".//{http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2}netcdf"):
-                ncml_netcdf_files.append(f.attrib['location'])
+            ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
             layer.data = f'NETCDF:{ncml_netcdf_files[dimension_search[0]["selected_band_number"]]}:{actual_variable}'
         except FileNotFoundError:
             logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")

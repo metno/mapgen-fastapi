@@ -41,13 +41,14 @@ import logging
 import datetime
 import mapscript
 from osgeo import gdal
+from lxml import etree
 
 from fastapi import Request, Query, HTTPException, BackgroundTasks
 import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from mapgen.modules.helpers import _parse_request
+from mapgen.modules.helpers import _parse_request, _read_netcdfs_from_ncml
 
 grid_mapping_cache = {}
 summary_cache = {}
@@ -275,18 +276,23 @@ async def generic_quicklook(netcdf_path: str,
 
     # Read all variables names from the netcdf file.
     is_ncml = False
+    last_ds_disk = None
     try:
         ds_disk = xr.open_dataset(netcdf_path, mask_and_scale=False)
     except ValueError:
         try:
-            import xncml
-            ds_disk = xncml.open_ncml(netcdf_path)
-            is_ncml = True
+            if netcdf_path.endswith('ncml'):
+                netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
+                ds_disk = xr.open_dataset(netcdf_files[0], mask_and_scale=False)
+                last_ds_disk = xr.open_dataset(netcdf_files[-1], mask_and_scale=False)
+                # import xncml
+                # ds_disk = xncml.open_ncml("./output.xml")
+                is_ncml = True
         except Exception as e:
             logger.error(f"status_code=500, Can not open file. Either not existing or ncml file: {e}")
             raise HTTPException(status_code=500, detail=f"Can not open file. Either not existing or ncml file: {e}")
     except FileNotFoundError:
-        logger.error(f"status_code=500, File Not Found: {orig_netcdf_path}.")
+        logger.error(f"status_code=500, File Not Found: {netcdf_path}.")
         raise HTTPException(status_code=500, detail=f"File Not Found: {orig_netcdf_path}.")
 
     # variables = list(ds_disk.keys())
@@ -294,12 +300,15 @@ async def generic_quicklook(netcdf_path: str,
     #get forecast reference time from dataset
     try:
         if is_ncml:
-            if len(ds_disk['forecast_reference_time'].data) > 1:
-                if ds_disk['forecast_reference_time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
-                    forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
-                else:
-                    logger.error(f"status_code=500, This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}.")
-                    raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
+            try:
+                if len(ds_disk['forecast_reference_time'].data) > 1:
+                    if ds_disk['forecast_reference_time'].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
+                        forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
+                    else:
+                        logger.error(f"status_code=500, This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}.")
+                        raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
+            except TypeError as te:
+                forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
             try:
                 logger.debug(f"{ds_disk['time'].dt}")
             except (TypeError, AttributeError):
@@ -403,10 +412,11 @@ async def generic_quicklook(netcdf_path: str,
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
             for variable in variables:
-                if variable in ['longitude', 'latitude']:
+                if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'p0', 'ap', 'b']:
+                    logger.debug(f"Skipping variable or dimension: {variable}")
                     continue
                 layer = mapscript.layerObj()
-                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                     logger.debug(f"Add wind vector layer for {variable}.")
