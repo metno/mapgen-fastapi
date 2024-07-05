@@ -169,22 +169,25 @@ async def generic_quicklook(netcdf_path: str,
             map_object.setSymbolSet(symbol_file)
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
+            netcdf_files = []
+            if netcdf_path.endswith('ncml'):
+                netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
             for variable in variables:
                 if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'p0', 'ap', 'b']:
                     logger.debug(f"Skipping variable or dimension: {variable}")
                     continue
                 layer = mapscript.layerObj()
-                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk):
+                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk, netcdf_files):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                     logger.debug(f"Add wind vector layer for {variable}.")
                     layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False):
+                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False, last_ds=last_ds_disk, netcdf_files=netcdf_files):
                         layer_no = map_object.insertLayer(layer_contour)
                 if variable == 'wind_direction' and 'wind_speed' in variables:
                     logger.debug(f"Add wind vector layer based on wind direction and speed for {variable}.")
                     layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True):
+                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files):
                         layer_no = map_object.insertLayer(layer_contour)
 
     if layer_no == 0 and not map_object:
