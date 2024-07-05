@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import gc
 import os
 import sys
 import logging
@@ -66,7 +67,11 @@ async def get_quicklook(netcdf_path: str,
 
     # Call module
     response = await loaded_module(netcdf_path, full_request, background_tasks, products, product_config)
+    background_tasks.add_task(clean_data)
     return response
+
+async def clean_data():
+    gc.collect()
 
 @router.get("/{image_path:path}", include_in_schema=False)
 async def main(image_path: str):
