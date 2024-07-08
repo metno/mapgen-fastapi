@@ -274,6 +274,7 @@ def _exists_on_ceph(satpy_product, start_time):
 
 async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
     """Generate and save geotiff to local disk in omerc based on actual area."""
+    return_val = True
     satpy_products = []
     for _satpy_product in satpy_products_to_generate:
         if not _exists_on_ceph(_satpy_product, start_time) and not os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
@@ -296,6 +297,10 @@ async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, star
         logger.debug(f"{bb_area}")
         logger.debug(f"{bb_area.pixel_size_x}")
         logger.debug(f"{bb_area.pixel_size_y}")
+    except ValueError:
+        logger.error("Failed to compute optimal area. Several reasons could cause this. Please see previous log lines.")
+        return_val = False
+        return return_val
     except KeyError:
         # Need a backup overview area if bb_area doesn't work
         logger.debug(f"Can not compute bb area. Use euro4 as backup.")
@@ -328,7 +333,6 @@ async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, star
             if os.path.exists(os.path.join(product_config.get('geotiff_tmp'), _satpy_product['satpy_product_filename'])):
                 products_to_upload_to_ceph.append(_satpy_product)
     logger.debug(f"After save {str(products_to_upload_to_ceph)}")
-    return_val = True
     if not products_to_upload_to_ceph or not _upload_geotiff_to_ceph(products_to_upload_to_ceph, resample_scene.start_time, product_config):
         return_val = False
     swath_scene.unload()
