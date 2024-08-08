@@ -78,4 +78,6 @@ async def main(image_path: str):
     """Need this to local images"""
     logger.debug(f"image path: {image_path}")
     logger.debug(f"CWD: {os.getcwd()}")
+    if not os.path.exists(image_path) or image_path not in ['robots.txt', 'favicon.ico']:
+        raise HTTPException(status_code=404, detail="These aren't the droids you're looking for.")
     return FileResponse(image_path)
