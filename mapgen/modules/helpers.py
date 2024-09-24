@@ -44,6 +44,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 def _read_config_file(regexp_config_file):
+    logger.debug(f"{regexp_config_file}")
     regexp_config = None
     try:
         if os.path.exists(regexp_config_file):
@@ -288,12 +289,15 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_
         map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
     except KeyError:
         try:
-            map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
+            map_object.setSize(xr_dataset.dims['X'], xr_dataset.dims['Y'])
         except KeyError:
             try:
-                map_object.setSize(xr_dataset.dims['Xc'], xr_dataset.dims['Yc'])
+                map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
             except KeyError:
-                map_object.setSize(2000, 2000)
+                try:
+                    map_object.setSize(xr_dataset.dims['Xc'], xr_dataset.dims['Yc'])
+                except KeyError:
+                    map_object.setSize(2000, 2000)
     map_object.units = mapscript.MS_DD
     try:
         map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
@@ -338,15 +342,21 @@ def _extract_extent(ds, variable):
         ur_y = max(ds[variable].coords['y'].data)
     except KeyError:
         try:
-            ll_x = min(ds[variable].coords['Xc'].data)
-            ur_x = max(ds[variable].coords['Xc'].data)
-            ll_y = min(ds[variable].coords['Yc'].data)
-            ur_y = max(ds[variable].coords['Yc'].data)
+            ll_x = min(ds[variable].coords['X'].data)
+            ur_x = max(ds[variable].coords['X'].data)
+            ll_y = min(ds[variable].coords['Y'].data)
+            ur_y = max(ds[variable].coords['Y'].data)
         except KeyError:
-            ll_x = min(ds[variable].coords['longitude'].data)
-            ur_x = max(ds[variable].coords['longitude'].data)
-            ll_y = min(ds[variable].coords['latitude'].data)
-            ur_y = max(ds[variable].coords['latitude'].data)
+            try:
+                ll_x = min(ds[variable].coords['Xc'].data)
+                ur_x = max(ds[variable].coords['Xc'].data)
+                ll_y = min(ds[variable].coords['Yc'].data)
+                ur_y = max(ds[variable].coords['Yc'].data)
+            except KeyError:
+                ll_x = min(ds[variable].coords['longitude'].data)
+                ur_x = max(ds[variable].coords['longitude'].data)
+                ll_y = min(ds[variable].coords['latitude'].data)
+                ur_y = max(ds[variable].coords['latitude'].data)
 
     return ll_x,ur_x,ll_y,ur_y
 
@@ -468,7 +478,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
             continue
         logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
@@ -583,7 +593,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         except Exception:
             logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
             continue
         if dim_name in 'time':
             logger.debug("handle time")
@@ -662,7 +672,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'Xc', 'y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
             continue
         for _dim_name in [dim_name, f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
@@ -1196,15 +1206,38 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
         layer.setProcessingKey('UV_SPACING', str(uv_spacing)) #Default 32
 
     else:
+        logger.debug(f"Dimmension search len {len(dimension_search)}")
         if len(dimension_search) == 1:
             logger.debug("Len 1")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
+            if '_FillValue' in ds[actual_variable].attrs:
+                if min_val == ds[actual_variable].attrs['_FillValue']:
+                    logger.debug(f"Need to rescale min_val {min_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data,
+                                                    ds[actual_variable].attrs['_FillValue'], copy=False)
+                    min_val = masked_fillvalue.min()
+                if max_val == ds[actual_variable].attrs['_FillValue']:
+                    logger.debug(f"Need to rescale max_val {max_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data,
+                                                    ds[actual_variable].attrs['_FillValue'], copy=False)
+                    max_val = masked_fillvalue.max()
         elif len(dimension_search) == 2:
             logger.debug(f"Len 2 of {actual_variable}")
             try:
                 min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
                 max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data)
+                if '_FillValue' in ds[actual_variable].attrs:
+                    if min_val == ds[actual_variable].attrs['_FillValue']:
+                        logger.debug(f"Need to rescale min_val {min_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                        masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data,
+                                                      ds[actual_variable].attrs['_FillValue'], copy=False)
+                        min_val = masked_fillvalue.min()
+                    if max_val == ds[actual_variable].attrs['_FillValue']:
+                        logger.debug(f"Need to rescale max_val {max_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                        masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],:,:].data,
+                                                      ds[actual_variable].attrs['_FillValue'], copy=False)
+                        max_val = masked_fillvalue.max()
             except IndexError:
                 ncml_netcdf_files = _read_netcdfs_from_ncml(netcdf_file)
                 with xr.open_dataset(ncml_netcdf_files[dimension_search[0]["selected_band_number"]], mask_and_scale=False) as ds_actual:
@@ -1217,7 +1250,8 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
         elif not dimension_search:
             logger.debug("Dimension search empty. Possible calculated field.")
-
+        else:
+            logger.error(f"Could not estimate or read min and/or max val of dataset: {actual_variable}")
         logger.debug(f"MIN:MAX {min_val} {max_val}")
         #Grayscale
         if style in 'contour': #variable.endswith('_contour'):
