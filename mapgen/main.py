@@ -2,7 +2,7 @@
 main app
 ====================
 
-Copyright 2022 MET Norway
+Copyright 2022,2024 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,16 +17,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# import fastapi
-# from starlette.middleware.cors import CORSMiddleware
-# import uvicorn
-# from mapgen.views import dashboard
-# from mapgen.modules import get_quicklook
-
 import os
+import time
 import logging
-# from gunicorn import glogging
-
+from multiprocessing import Process, Queue
+from mapgen.modules.get_quicklook import get_quicklook
 
 logging_cfg = {
     'version': 1,
@@ -59,10 +54,6 @@ logging_cfg = {
         'handlers': ['console'],
     }
 }
-
-import time
-from multiprocessing import Process, Queue
-from mapgen.modules.get_quicklook import get_quicklook
 
 def start_processing(netcdf_path, query_string, netloc, scheme, q):
     try:
