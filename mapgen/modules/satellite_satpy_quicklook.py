@@ -2,7 +2,7 @@
 satellite thredds module : module
 ====================
 
-Copyright 2022 MET Norway
+Copyright 2022,2024 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,13 +25,14 @@ import logging
 import botocore
 import rasterio
 import traceback
-from fastapi import Request, Query, HTTPException, BackgroundTasks
 from satpy import Scene
 import mapscript
 from glob import glob
 from datetime import datetime
+from urllib.parse import parse_qs
 
 from mapgen.modules.helpers import handle_request
+from mapgen.modules.helpers import HTTPError
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)
@@ -46,16 +47,16 @@ def _get_satpy_products(satpy_products, full_request, default_dataset):
         ms_satpy_products = satpy_products
     else:
         try:
-            ms_satpy_products = [full_request.query_params['layers']]
+            ms_satpy_products = full_request['layers']
         except KeyError:
             try:
-                ms_satpy_products = [full_request.query_params['LAYERS']]
+                ms_satpy_products = full_request['LAYERS']
             except KeyError:
                 try:
-                    ms_satpy_products = [full_request.query_params['layer']]
+                    ms_satpy_products = full_request['layer']
                 except KeyError:
                     try:
-                        ms_satpy_products = [full_request.query_params['LAYER']]
+                        ms_satpy_products = full_request['LAYER']
                     except KeyError:
                         pass
     return ms_satpy_products
@@ -63,15 +64,17 @@ def _get_satpy_products(satpy_products, full_request, default_dataset):
 def _get_mapfiles_path(regexp_pattern_module):
     return regexp_pattern_module['mapfiles_path']
 
-async def generate_satpy_quicklook(netcdf_path: str,
-                             full_request: Request,
-                             background_task: BackgroundTasks,
-                             satpy_products: list = Query(default=[]),
+def generate_satpy_quicklook(netcdf_path: str,
+                             query_string: str,
+                             http_host: str,
+                             url_scheme: str,
+                             satpy_products: list = [],
                              product_config: dict = {}):
     
-    logger.debug(f"Request query_params: {str(full_request.query_params)}")
-    logger.debug(f"Request url scheme: {full_request.url.scheme}")
-    logger.debug(f"Request url netloc: {full_request.url.netloc}")
+    full_request = parse_qs(query_string)
+    logger.debug(f"Request query_params: {full_request}")
+    logger.debug(f"Request url scheme: {url_scheme}")
+    logger.debug(f"Request url netloc: {http_host}")
     netcdf_path = netcdf_path.replace("//", "/")
     orig_netcdf_path = netcdf_path
     try:
@@ -82,11 +85,11 @@ async def generate_satpy_quicklook(netcdf_path: str,
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPException(status_code=500, detail="Missing base dir in server config.")
+        raise HTTPError(response_code='500', response="Missing base dir in server config.")
 
     if not netcdf_path:
         logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
-        raise HTTPException(status_code=404, detail="Missing netcdf path")
+        raise HTTPError(response_code='404', response="Missing netcdf path.")
     logger.debug(f"{satpy_products}")
 
     resolution = None
@@ -98,7 +101,7 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     (_path, _platform_name, _, _start_time, _end_time) = _parse_filename(netcdf_path, product_config)
     start_time = datetime.strptime(_start_time, "%Y%m%d%H%M%S")
-    similar_netcdf_paths = await _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time, netcdf_path)
+    similar_netcdf_paths = _search_for_similar_netcdf_paths(_path, _platform_name, _start_time, _end_time, netcdf_path)
     logger.debug(f"Similar netcdf paths: {similar_netcdf_paths}")
     ms_satpy_products = _get_satpy_products(satpy_products, full_request, product_config['default_dataset'])
     logger.debug(f"satpy product/layer {ms_satpy_products}")
@@ -113,56 +116,29 @@ async def generate_satpy_quicklook(netcdf_path: str,
     
     
     try:
-        if not await _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
+        if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
             logger.error(f"status_code=500, Some part of the generate failed.")
-            raise HTTPException(status_code=500, detail=f"Some part of the generate failed.")
+            raise HTTPError(response_code='500', response="Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
             logger.error(f"status_code=500, Layer can not be made for this dataset {str(ke)}")
-            raise HTTPException(status_code=500, detail=f"Layer can not be made for this dataset {str(ke)}")
+            raise HTTPError(response_code='500', response=f"Layer can not be made for this dataset {str(ke)}")
 
     map_object = mapscript.mapObj()
-    _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request)
+    _fill_metadata_to_mapfile(orig_netcdf_path, map_object, url_scheme, http_host)
 
     for satpy_product in satpy_products_to_generate:
         layer = mapscript.layerObj()
-        await _generate_layer(start_time,
+        _generate_layer(start_time,
                         satpy_product['satpy_product'],
                         satpy_product['satpy_product_filename'],
                         satpy_product['bucket'],
                         layer)
         layer_no = map_object.insertLayer(layer)
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'satpy-products-{start_time:%Y%m%d%H%M%S}.map'))
-    background_task.add_task(clean_data, map_object)
-    return await handle_request(map_object, full_request)
+    return handle_request(map_object, query_string)
 
-async def clean_data(map_object):
-    logger.debug(f"I need to clean some data to avoid memort stash")
-    try:
-        for layer in range(map_object.numlayers):
-            try:
-                for cls in range(map_object.getLayer(0).numclasses):
-                    try:
-                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
-                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
-                            del ref
-                            ref = None
-                    except AttributeError:
-                        pass
-                    ref = map_object.getLayer(0).removeClass(0)
-                    del ref
-                    ref = None
-            except AttributeError:
-                pass
-            ref = map_object.removeLayer(0)
-            del ref
-            ref = None
-        del map_object
-        map_object = None
-    except AttributeError:
-        pass
-
-async def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
+def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, layer):
     """Generate a layer based on the metadata from geotiff."""
     try:
         logger.debug(f"Rasterio open")
@@ -191,10 +167,10 @@ async def _generate_layer(start_time, satpy_product, satpy_product_filename, buc
     dataset = None
     logger.debug(f"Complete generate layer")
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, full_request):
+def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, url_scheme, netloc):
     """"Add all needed web metadata to the generated map file."""
     map_object.web.metadata.set("wms_title", "WMS senda fastapi")
-    map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
+    map_object.web.metadata.set("wms_onlineresource", f"{url_scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
@@ -235,7 +211,7 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
         logger.error(f"status_code=500, Failed to upload file to s3.")
-        raise HTTPException(status_code=500, detail="Failed to upload file to s3.")
+        raise HTTPError(response_code='500', response="Failed to upload file to s3.")
     finally:
         s3_client.close()
         del s3_client
@@ -272,7 +248,7 @@ def _exists_on_ceph(satpy_product, start_time):
         s3 = None
     return exists
 
-async def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
+def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
     """Generate and save geotiff to local disk in omerc based on actual area."""
     return_val = True
     satpy_products = []
@@ -356,9 +332,9 @@ def _parse_filename(netcdf_path, product_config):
     else:
         logger.debug(f"No match: {netcdf_path}")
         logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
-        raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
+        raise HTTPError(response_code='500', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
-async def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
+def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
     if 'fy3d' in platform_name or 'aqua' in platform_name or 'terra' in platform_name:
         similar_netcdf_paths = [netcdf_path]
     else:

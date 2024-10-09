@@ -2,7 +2,7 @@
 Helpers
 ====================
 
-Copyright 2023 MET Norway
+Copyright 2023,2024 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,8 +32,7 @@ from osgeo import gdal
 from lxml import etree
 import xml.dom.minidom
 from pyproj import CRS
-from fastapi import HTTPException
-from fastapi.responses import Response
+from urllib.parse import parse_qs
 
 import numpy as np
 import xarray as xr
@@ -43,6 +42,16 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+class HTTPError(Exception):
+    def __init__(self, response_code='500', response=b'', content_type='text/plain'):
+        self.response_code = response_code
+        self.response = response.encode()
+        self.content_type = content_type
+ 
+    def __str__(self):
+        return(repr(f"{self.response_code}: {self.response}"))
+ 
+    
 def _read_config_file(regexp_config_file):
     logger.debug(f"{regexp_config_file}")
     regexp_config = None
@@ -65,6 +74,9 @@ def find_config_for_this_netcdf(netcdf_path):
                                           default_regexp_config_filename)
     regexp_config = _read_config_file(regexp_config_file)
     regexp_pattern_module = None
+    content_type = 'text/plain'
+    response = ''
+    response_code = '200'
     if regexp_config:
         try:
             for url_path_regexp_pattern in regexp_config:
@@ -82,34 +94,36 @@ def find_config_for_this_netcdf(netcdf_path):
             logger.debug(f"Exception in the netcdf_path match part with {str(e)}")
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
-            logger.error(f"status_code=500, Exception raised when regexp. Check the config.")
-            raise HTTPException(status_code=500, detail=f"Exception raised when regexp. Check the config.")
+            response = f"Exception raised when regexp. Check the config."
+            logger.error(response)
+            response_code = '500'
     if not regexp_pattern_module:
-        logger.error(f"status_code=501, The server have no setup to handle the requested file {netcdf_path}. Check with the maintainer if this could be added.")
-        raise HTTPException(status_code=501, detail=f"The server have no setup to handle the requested file {netcdf_path}. Check with the maintainer if this could be added.")
+        response = f"The server have no setup to handle the requested file {netcdf_path}. Check with the maintainers if this could be added."
+        logger.error(response)
+        response_code = '501'
 
-    return regexp_pattern_module
+    return regexp_pattern_module, response.encode(), response_code, content_type
 
-async def handle_request(map_object, full_request):
+def handle_request(map_object, full_request):
     ows_req = mapscript.OWSRequest()
     ows_req.type = mapscript.MS_GET_REQUEST
-    full_request_string = str(full_request.query_params)
+    full_request_string = str(full_request)
     try:
         # Replace automatic inserted &amp; instead of plain &
         full_request_string = full_request_string.replace("&amp;", "&")
         full_request_string = full_request_string.replace("&amp%3B", "&")
         logger.debug(f"Full request string: {full_request_string}")
     except Exception as e:
-        logger.error(f"status_code=500, failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
-        raise HTTPException(status_code=500,
-                            detail=f"failed to handle query parameters: {str(full_request.query_params)}, with error: {str(e)}")
+        logger.error(f"status_code=500, failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
+        raise HTTPError(response_code='500',
+                        response=f"failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
     try:
         ows_req.loadParamsFromURL(full_request_string)
     except mapscript.MapServerError:
         ows_req = mapscript.OWSRequest()
         ows_req.type = mapscript.MS_GET_REQUEST
         pass
-    if not full_request.query_params or (ows_req.NumParams == 1 and 'satpy_products' in full_request.query_params):
+    if not full_request or (ows_req.NumParams == 1 and 'satpy_products' in full_request):
         logger.debug("Query params are empty or only contains satpy-product query parameter. Force getcapabilities")
         ows_req.setParameter("SERVICE", "WMS")
         ows_req.setParameter("VERSION", "1.3.0")
@@ -144,9 +158,9 @@ async def handle_request(map_object, full_request):
         try:
             map_object.OWSDispatch( ows_req )
         except Exception as e:
-            logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
-            raise HTTPException(status_code=500,
-                                detail=f"mapscript fails to parse query parameters: {str(full_request.query_params)}, with error: {str(e)}")
+            logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
+            raise HTTPError(response_code='500',
+                            response=f"mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
         result = mapscript.msIO_getStdoutBufferBytes()
         mapscript.msIO_resetHandlers()
@@ -162,16 +176,11 @@ async def handle_request(map_object, full_request):
         if content_type == 'application/vnd.ogc.wms_xml; charset=UTF-8':
             content_type = 'text/xml'
         dom = xml.dom.minidom.parseString(_result)
-        result = dom.toprettyxml(indent="", newl="")
+        result = dom.toprettyxml(indent="", newl="").encode()
         mapscript.msIO_resetHandlers()
     logger.info(f"status_code=200, mapscript return successfully.")
-    return Response(result, status_code=200, media_type=content_type)
-
-#from typing import Optional
-#from . import _util
-#from maptor.config import ModelConfiguration
-
-
+    response_code = '200'
+    return response_code, result, content_type
 
 def _get_speed(x_vector: xr.DataArray, y_vector: xr.DataArray, standard_name: str) -> xr.DataArray:
     data = np.sqrt((x_vector**2) + (y_vector**2))
@@ -236,7 +245,7 @@ def _rotate_relative_to_north(from_direction: xr.DataArray, north: np.ndarray):
     from_direction -= north
     from_direction %= 360
 
-def _find_summary_from_csw(search_fname, forecast_time, full_request):
+def _find_summary_from_csw(search_fname, forecast_time, scheme, netloc):
     summary_text = None
     search_string = ""
     if 'arome_arctic' in search_fname:
@@ -248,12 +257,12 @@ def _find_summary_from_csw(search_fname, forecast_time, full_request):
     if search_string != "":
         search_string += forecast_time.strftime('%Y-%m-%dT%H:%M:%SZ')
         logger.debug(f"CSW Search string {search_string}")
-        netloc = full_request.url.netloc
+        #netloc = full_request.url.netloc
         if 's-enda' in netloc:
             netloc = netloc.replace("fastapi", "csw")
         else:
             netloc = 'csw.s-enda-dev.k8s.met.no'
-        url = (f'{full_request.url.scheme}://{netloc}/?'
+        url = (f'{scheme}://{netloc}/?'
                 'mode=opensearch&service=CSW&version=2.0.2&request=GetRecords&elementsetname=full&'
             f'typenames=csw:Record&resulttype=results&q={search_string}')
         try:
@@ -270,18 +279,18 @@ def _find_summary_from_csw(search_fname, forecast_time, full_request):
         logger.debug("Not enough data to build CSW search_string for summary. Please add if applicable.")
     return summary_text
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, xr_dataset, summary_cache, wms_title):
+def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title):
     """"Add all needed web metadata to the generated map file."""
     bn = os.path.basename(orig_netcdf_path)
     if bn not in summary_cache:
-        summary = _find_summary_from_csw(bn, forecast_time, full_request)
+        summary = _find_summary_from_csw(bn, forecast_time, scheme, netloc)
         if summary:
             summary_cache[bn] = summary
             logger.debug(f"{summary_cache[bn]}")
         else:
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
-    map_object.web.metadata.set("wms_onlineresource", f"{full_request.url.scheme}://{full_request.url.netloc}/api/get_quicklook{orig_netcdf_path}")
+    map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
@@ -366,15 +375,6 @@ def find_time_diff(ds, dim_name):
     prev_diff = None
     is_range = True
     diff_string = None
-    # try:
-    #     logger.debug(f"{ds[dim_name].dt}")
-    # except TypeError:
-    #     if ds[dim_name].attrs['units'] == 'seconds since 1970-01-01 00:00:00 +00:00':
-    #         ds[dim_name] = pd.TimedeltaIndex(ds[dim_name], unit='s') + datetime.datetime(1970, 1, 1)
-    #         ds[dim_name] = pd.to_datetime(ds[dim_name])
-    #     else:
-    #         logger.debug(f"This unit is not implemented: {ds[dim_name].attrs['units']}")
-    #         raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds[dim_name].attrs['units']}")
     if len(ds[dim_name].dt.year.data) == 1:
         logger.debug(f"Time diff len {len(ds[dim_name].dt.year.data)}")
         is_range = False
@@ -710,7 +710,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
                             time_as_band += 1
                         else:
                             logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
-                            raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                            raise HTTPError(response_code='500', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
                 else:
@@ -726,7 +726,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
                         selected_band_no += 1
                     else:
                         logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
-                        raise HTTPException(status_code=500, detail=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                        raise HTTPError(response_code='500', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = selected_band_no
                     dimension_search.append(_ds)
                 break
@@ -807,7 +807,7 @@ def _add_wind_barb_100_150(map_obj, layer, colour_tripplet, min, max):
     style_base.setSymbolByName(map_obj, f"wind_barb_{min+2}")
     return
 
-async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache, last_ds=None):
+def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache, last_ds=None):
     try:
         variable = qp['layer']
     except KeyError:
@@ -1055,7 +1055,7 @@ async def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_ob
             logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")
         except Exception:
             logger.error(f"status_code=500, Failed to parse ncml file to find individual file.")
-            raise HTTPException(status_code=500, detail=f"Failed to parse ncml file to find individual file.")
+            raise HTTPError(response_code='500', response=f"Failed to parse ncml file to find individual file.")
 
     elif grid_mapping_name == 'calculated_omerc':
         logger.debug("Try to resample data on the fly and using gdal vsimem.")
@@ -1410,7 +1410,7 @@ def _parse_filename(netcdf_path, product_config):
         return mtchs.groups()
     else:
         logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
-        raise HTTPException(status_code=500, detail=f"No file name match: {netcdf_path}, match string {pattern_match}.")
+        raise HTTPError(response_code='500', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _get_mapfiles_path(regexp_pattern_module):
     try:
@@ -1418,8 +1418,10 @@ def _get_mapfiles_path(regexp_pattern_module):
     except KeyError:
         return "./"
 
-def _parse_request(full_request):
-    qp = {k.lower(): v for k, v in full_request.query_params.items()}
+def _parse_request(query_string):
+    full_request = parse_qs(query_string)
+
+    qp = {k.lower(): v for k, v in full_request.items()}
     logger.debug(f"QP: {qp}")
     qp = {k.replace("amp;","") if k.startswith("amp;") else k:v for k,v in qp.items()}
     logger.debug(f"QP after replace amp;: {qp}")

@@ -2,7 +2,7 @@
 gridded data quicklook template : module
 ====================
 
-Copyright 2023 MET Norway
+Copyright 2023,2024 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@ Needed entries in the config:
             'geotiff_tmp': '.'
 
 """
-from fastapi import Request, Query
 import mapscript
 
 from helpers import handle_request
@@ -48,8 +47,10 @@ def _generate_layer(layer):
     return
 
 def gridded_data_quicklook_template(netcdf_path: str,
-                                    full_request: Request,
-                                    products: list = Query(default=[]),
+                                    query_string: str,
+                                    http_host: str,
+                                    url_scheme: str,
+                                    satpy_products: list = [],
                                     product_config: dict = {}):
 
     # Parse the netcdf filename to get start time or reference time
@@ -62,7 +63,7 @@ def gridded_data_quicklook_template(netcdf_path: str,
     # Add this to some data structure.
     # Pass this data structure to mapscript to create an in memory config for mapserver/mapscript
     map_object = mapscript.mapObj()
-    _fill_metadata_to_mapfile(netcdf_path, map_object, full_request)
+    _fill_metadata_to_mapfile(netcdf_path, map_object, url_scheme, http_host)
 
     layers = "all needed layers/variables"
     for satpy_product in layers:
@@ -71,5 +72,4 @@ def gridded_data_quicklook_template(netcdf_path: str,
         layer_no = map_object.insertLayer(layer)
 
     # Handle the request and return results.
-    return handle_request(map_object, full_request)
-
+    return handle_request(map_object, query_string)
