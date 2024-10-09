@@ -1425,4 +1425,6 @@ def _parse_request(query_string):
     logger.debug(f"QP: {qp}")
     qp = {k.replace("amp;","") if k.startswith("amp;") else k:v for k,v in qp.items()}
     logger.debug(f"QP after replace amp;: {qp}")
+    qp = {k if (isinstance(v, list) and len(v) == 1) else k:v[0] for k,v in qp.items()}
+    logger.debug(f"QP after flatten lists {qp}")
     return qp
