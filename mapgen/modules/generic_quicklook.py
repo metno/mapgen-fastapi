@@ -35,20 +35,16 @@ Needed entries in the config:
 
 """
 import os
-import sys
 import pandas
 import logging
 import datetime
 import mapscript
-from osgeo import gdal
-from lxml import etree
 
-from fastapi import Request, Query, HTTPException, BackgroundTasks
 import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from mapgen.modules.helpers import _parse_request, _read_netcdfs_from_ncml
+from mapgen.modules.helpers import _parse_request, _read_netcdfs_from_ncml, HTTPError
 
 grid_mapping_cache = {}
 summary_cache = {}
@@ -56,10 +52,11 @@ wind_rotation_cache = {}
 
 logger = logging.getLogger(__name__)
 
-async def generic_quicklook(netcdf_path: str,
-                      full_request: Request,
-                      background_task: BackgroundTasks,
-                      products: list = Query(default=[]),
+def generic_quicklook(netcdf_path: str,
+                      query_string: str,
+                      http_host: str,
+                      url_scheme: str,
+                      satpy_products: list = [],
                       product_config: dict = {}):
     netcdf_path = netcdf_path.replace("//", "/")
     orig_netcdf_path = netcdf_path
@@ -71,11 +68,11 @@ async def generic_quicklook(netcdf_path: str,
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPException(status_code=500, detail="Missing base dir in server config.")
+        raise HTTPError(response_code='500', response="Missing base dir in server config.")
 
     if not netcdf_path:
         logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
-        raise HTTPException(status_code=404, detail="Missing netcdf path")
+        raise HTTPError(response_code='404', response="Missing netcdf path")
 
     # Read all variables names from the netcdf file.
     is_ncml = False
@@ -93,12 +90,10 @@ async def generic_quicklook(netcdf_path: str,
                 is_ncml = True
         except Exception as e:
             logger.error(f"status_code=500, Can not open file. Either not existing or ncml file: {e}")
-            raise HTTPException(status_code=500, detail=f"Can not open file. Either not existing or ncml file: {e}")
+            raise HTTPError(response_code='500', response=f"Can not open file. Either not existing or ncml file: {e}")
     except FileNotFoundError:
         logger.error(f"status_code=500, File Not Found: {netcdf_path}.")
-        raise HTTPException(status_code=500, detail=f"File Not Found: {orig_netcdf_path}.")
-
-    # variables = list(ds_disk.keys())
+        raise HTTPError(response_code='500', response=f"File Not Found: {orig_netcdf_path}.")
 
     #get forecast reference time from dataset
     try:
@@ -109,7 +104,7 @@ async def generic_quicklook(netcdf_path: str,
                         forecast_time = datetime.timedelta(seconds=ds_disk['forecast_reference_time'].data[0]) + datetime.datetime(1970,1,1)
                     else:
                         logger.error(f"status_code=500, This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}.")
-                        raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
+                        raise HTTPError(response_code='500', response=f"This unit is not implemented: {ds_disk['forecast_reference_time'].attrs['units']}")
             except TypeError as te:
                 forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
             try:
@@ -120,7 +115,7 @@ async def generic_quicklook(netcdf_path: str,
                     ds_disk['time'] = pandas.to_datetime(ds_disk['time'])
                 else:
                     logger.error(f"status_code=500, This unit is not implemented: {ds_disk['time'].attrs['units']}.")
-                    raise HTTPException(status_code=500, detail=f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
+                    raise HTTPError(response_code='500', response=f"This unit is not implemented: {ds_disk['time'].attrs['units']}")
 
         else:
             forecast_time = pandas.to_datetime(ds_disk['forecast_reference_time'].data).to_pydatetime()
@@ -143,7 +138,7 @@ async def generic_quicklook(netcdf_path: str,
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
  
-    qp = _parse_request(full_request)
+    qp = _parse_request(query_string)
 
     layer_no = 0
     map_object = None
@@ -151,10 +146,10 @@ async def generic_quicklook(netcdf_path: str,
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "Generic netcdf WMS")
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
+        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
@@ -165,7 +160,7 @@ async def generic_quicklook(netcdf_path: str,
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
-            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "Generic netcdf WMS")
+            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS")
             map_object.setSymbolSet(symbol_file)
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
@@ -195,40 +190,10 @@ async def generic_quicklook(netcdf_path: str,
         logger.error(f"status_code=500, Could not find any variables to turn into OGC WMS layers. One "
                      "reason can be your data does not have a valid grid_mapping (Please see CF "
                      "grid_mapping), or internal resampling failed.")
-        raise HTTPException(status_code=500, detail=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
+        raise HTTPError(response_code='500', response=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
                                                      "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
 
-    # add background task
-    background_task.add_task(clean_data, map_object, actual_variable)
     # Handle the request and return results.
-    return await handle_request(map_object, full_request)
-
-async def clean_data(map_object, actual_variable):
-    logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
-    try:
-        for layer in range(map_object.numlayers):
-            try:
-                for cls in range(map_object.getLayer(0).numclasses):
-                    try:
-                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
-                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
-                            del ref
-                            ref = None
-                    except AttributeError:
-                        pass
-                    ref = map_object.getLayer(0).removeClass(0)
-                    del ref
-                    ref = None
-            except AttributeError:
-                pass
-            ref = map_object.removeLayer(0)
-            del ref
-            ref = None
-        if os.path.exists(f'/vsimem/in_memory_output_{actual_variable}.tif'):
-            gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
-        del map_object
-        map_object = None
-    except AttributeError:
-        pass
+    return handle_request(map_object, query_string)

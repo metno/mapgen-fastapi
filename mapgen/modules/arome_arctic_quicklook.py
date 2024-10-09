@@ -2,7 +2,7 @@
 gridded data quicklook template : module
 ====================
 
-Copyright 2023 MET Norway
+Copyright 2023,2024 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,19 +35,15 @@ Needed entries in the config:
 
 """
 import os
-#import glob
-import time
 import pandas
 import logging
-#import shutil
 import datetime
 import mapscript
-from fastapi import Request, Query, HTTPException, BackgroundTasks
 import xarray as xr
 from mapgen.modules.create_symbol_file import create_symbol_file
 from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from mapgen.modules.helpers import _parse_request
+from mapgen.modules.helpers import _parse_request, HTTPError
 
 grid_mapping_cache = {}
 wind_rotation_cache = {}
@@ -55,10 +51,11 @@ summary_cache = {}
 
 logger = logging.getLogger(__name__)
 
-async def arome_arctic_quicklook(netcdf_path: str,
-                           full_request: Request,
-                           background_task: BackgroundTasks,
-                           products: list = Query(default=[]),
+def arome_arctic_quicklook(netcdf_path: str,
+                           query_string: str,
+                           http_host: str,
+                           url_scheme: str,
+                           satpy_products: list = [],
                            product_config: dict = {}):
     netcdf_path = netcdf_path.replace("//", "/")
     orig_netcdf_path = netcdf_path
@@ -68,14 +65,14 @@ async def arome_arctic_quicklook(netcdf_path: str,
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPException(status_code=500, detail="Missing base dir in server config.")
+        raise HTTPError(response_code='500', response="Missing base dir in server config.")
 
     if not netcdf_path:
         logger.error(f"status_code=404, Missing netcdf path")
-        raise HTTPException(status_code=404, detail="Missing netcdf path")
+        raise HTTPError(response_code='404', response="Missing netcdf path")
     if not os.path.exists(netcdf_path):
         logger.error(f"status_code=404, Could not find {orig_netcdf_path} in server configured directory.")
-        raise HTTPException(status_code=404, detail=f"Could not find {orig_netcdf_path} in server configured directory.")
+        raise HTTPError(response_code='404', response=f"Could not find {orig_netcdf_path} in server configured directory.")
 
     ds_disk = xr.open_dataset(netcdf_path)
 
@@ -89,28 +86,19 @@ async def arome_arctic_quicklook(netcdf_path: str,
         forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
         logger.debug(f"{forecast_time}")
 
-    # logger.debug(f"{variables}")
-    # Loop over all variable names to add layer for each variable including needed dimmensions.
-    #   Time
-    #   Height
-    #   Pressure
-    #   Other dimensions
-    # Add this to some data structure.
-    # Pass this data structure to mapscript to create an in memory config for mapserver/mapscript
-
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
-    qp = _parse_request(full_request)
+    qp = _parse_request(query_string)
 
     map_object = None
     actual_variable = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "WMS Arome Arctic.")
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic.")
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = await _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
@@ -121,7 +109,7 @@ async def arome_arctic_quicklook(netcdf_path: str,
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
-            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, full_request, ds_disk, summary_cache, "WMS Arome Arctic")
+            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic")
             map_object.setSymbolSet(symbol_file)
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
@@ -141,33 +129,5 @@ async def arome_arctic_quicklook(netcdf_path: str,
     map_object.save(mapserver_map_file)
 
     ds_disk.close()
-    # add background task
-    background_task.add_task(clean_data, map_object, actual_variable)
     # Handle the request and return results.
-    return await handle_request(map_object, full_request)
-
-async def clean_data(map_object, actual_variable):
-    logger.debug(f"I need to clean some data to avoid memory stash: {actual_variable}")
-    try:
-        for layer in range(map_object.numlayers):
-            try:
-                for cls in range(map_object.getLayer(0).numclasses):
-                    try:
-                        for sty in range(map_object.getLayer(0).getClass(0).numstyles):
-                            ref = map_object.getLayer(0).getClass(0).removeStyle(0)
-                            del ref
-                            ref = None
-                    except AttributeError:
-                        pass
-                    ref = map_object.getLayer(0).removeClass(0)
-                    del ref
-                    ref = None
-            except AttributeError:
-                pass
-            ref = map_object.removeLayer(0)
-            del ref
-            ref = None
-        del map_object
-        map_object = None
-    except AttributeError:
-        pass
+    return handle_request(map_object, query_string)
