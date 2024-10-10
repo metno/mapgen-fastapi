@@ -57,8 +57,14 @@ logging_cfg = {
 
 def start_processing(netcdf_path, query_string, netloc, scheme, q):
     try:
+        start = time.time()
         response_code, response, content_type = get_quicklook(netcdf_path, query_string, netloc, scheme, products=None)
+        end = time.time()
+        logging.debug(f"qet_quicklook completed in: {end - start:f}seconds")
+        start = end
         q.put((response_code, response, content_type))
+        end = time.time()
+        logging.debug(f"Put results in queue in: {end - start:f}seconds")
     except KeyboardInterrupt:
         pass
 
