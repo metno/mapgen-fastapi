@@ -116,6 +116,10 @@ def handle_request(map_object, full_request):
         logger.error(f"status_code=500, failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
         raise HTTPError(response_code='500',
                         response=f"failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
+    if 'request=getlegendgraphic' in full_request_string.lower():
+        if not 'sld_version' in full_request_string.lower():
+            logger.warning("requst is getlegendgraphic, but no sld_version is given. Add SLD_VERSION=1.1.0 to query.")
+            full_request_string += '&SLD_VERSION=1.1.0'
     try:
         ows_req.loadParamsFromURL(full_request_string)
     except mapscript.MapServerError:
@@ -805,7 +809,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
     try:
         style = qp['styles']
     except KeyError:
-        style = qp['style']
+        try:
+            style = qp['style']
+        except KeyError:
+            logger.warning("Style is not in the request. This is mandatory, but I will set it to raster. This is maybe not what you want.")
+            style = 'raster'
     if (variable.endswith("_vector") or variable.endswith("_vector_from_direction_and_speed")) and style == "":
         logger.debug("Empty style. Force wind barbs.")
         style = "Wind_barbs"
@@ -1271,7 +1279,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                 _style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
                 _style.minvalue = float(min_val)
                 _style.maxvalue = float(max_val)
-            logger.debug(f"After comolrmap min max {min_val} {max_val}")
+            logger.debug(f"After colormap min max {min_val} {max_val}")
 
     return actual_variable
 
