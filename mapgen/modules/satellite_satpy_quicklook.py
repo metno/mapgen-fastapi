@@ -246,6 +246,7 @@ def _exists_on_ceph(satpy_product, start_time):
     finally:
         del s3
         s3 = None
+    exists = False
     return exists
 
 def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
