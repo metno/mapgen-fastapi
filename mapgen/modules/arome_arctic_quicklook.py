@@ -40,10 +40,10 @@ import logging
 import datetime
 import mapscript
 import xarray as xr
-from mapgen.modules.create_symbol_file import create_symbol_file
-from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
-from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from mapgen.modules.helpers import _parse_request, HTTPError
+from modules.create_symbol_file import create_symbol_file
+from modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
+from modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
+from modules.helpers import _parse_request, HTTPError
 
 grid_mapping_cache = {}
 wind_rotation_cache = {}

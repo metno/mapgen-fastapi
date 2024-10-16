@@ -31,8 +31,8 @@ from glob import glob
 from datetime import datetime
 from urllib.parse import parse_qs
 
-from mapgen.modules.helpers import handle_request
-from mapgen.modules.helpers import HTTPError
+from modules.helpers import handle_request
+from modules.helpers import HTTPError
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)

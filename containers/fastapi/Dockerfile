@@ -12,7 +12,7 @@ RUN micromamba install -y -n base --file /tmp/environment.yaml
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
+    git lsof less\
     && rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
 RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml

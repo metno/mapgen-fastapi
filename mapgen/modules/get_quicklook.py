@@ -20,11 +20,11 @@ limitations under the License.
 import sys
 import logging
 
-from mapgen.modules.helpers import find_config_for_this_netcdf, HTTPError
+from modules.helpers import find_config_for_this_netcdf, HTTPError
 
-import mapgen.modules.arome_arctic_quicklook
-import mapgen.modules.generic_quicklook
-import mapgen.modules.satellite_satpy_quicklook
+import modules.arome_arctic_quicklook
+import modules.generic_quicklook
+import modules.satellite_satpy_quicklook
 
 logger = logging.getLogger(__name__)
 
