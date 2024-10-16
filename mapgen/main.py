@@ -170,7 +170,7 @@ class wmsServer(BaseHTTPRequestHandler):
         http_host = self.address_string()
         for h in str(self.headers).split('\n'):
             logging.debug(f"Header: {h}")
-            if h.startswith('X-Scheme') in h:
+            if h.startswith('X-Scheme'):
                 try:
                     url_scheme = h.split(" ")[1]
                 except Exception:
