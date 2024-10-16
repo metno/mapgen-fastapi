@@ -246,7 +246,6 @@ def _exists_on_ceph(satpy_product, start_time):
     finally:
         del s3
         s3 = None
-    exists = False
     return exists
 
 def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
@@ -259,7 +258,7 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     if not satpy_products:
         logger.debug(f"No products needs to be generated.")
         return True
-    logger.debug(f"Need to generate: {satpy_products}")
+    logger.debug(f"Need to generate: {satpy_products} from {netcdf_paths}")
     logger.debug(f"Before Scene")
     swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
     logger.debug(f"Before load, resolution: {resolution}")
