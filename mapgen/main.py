@@ -21,7 +21,8 @@ import os
 import time
 import logging
 from multiprocessing import Process, Queue
-from mapgen.modules.get_quicklook import get_quicklook
+from modules.get_quicklook import get_quicklook
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 logging_cfg = {
     'version': 1,
@@ -97,7 +98,7 @@ def app(environ, start_response):
             end = time.time()
             logging.debug(f"Complete processing in {end - start:f}seconds")
         except KeyError as ke:
-            logging.debug(f"Failed to parse the query.")
+            logging.debug(f"Failed to parse the query: {str(ke)}")
             response_code = '404'
             response = b'Not Found\n'
         response_headers = [('Content-Type', content_type)]
@@ -157,3 +158,123 @@ def app(environ, start_response):
     start_response(response_code, response_headers)
     logging.debug(f"Queue length: {q.qsize()}")
     return [response]
+
+class wmsServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        content_type = 'text/plain'
+        start = time.time()
+        dbg = [self.path, self.client_address, self.requestline, self.request, self.command, self.address_string()]
+        for d in dbg:
+            logging.debug(f"{d}")
+        for h in str(self.headers).split('\n'):
+            logging.debug(f"Header: {h}")
+
+        try:
+            q = Queue()
+            if self.path.startswith('/api/get_quicklook'):
+                try:
+                    netcdf_path = self.path.replace('/api/get_quicklook','').split('?')[0]
+                    try:
+                        query_string = self.path.split('?')[1]
+                    except IndexError:
+                        query_string = ""
+                    url_scheme = os.environ.get('SCHEME', 'http')  # environ.get('HTTP_X_SCHEME', environ['wsgi.url_scheme'])
+                    http_host = os.environ.get('HOST_NAME', self.address_string())  # environ['HTTP_HOST']
+                    p = Process(target=start_processing,
+                                args=(netcdf_path,
+                                    query_string,
+                                    http_host,
+                                    url_scheme,
+                                    q))
+                    p.start()
+                    end = time.time()
+                    logging.debug(f"Started processing in {end - start:f}seconds")
+                    (response_code, response, content_type) = q.get()
+                    p.join()
+                    logging.debug(f"Returning successfully from query.")
+                    end = time.time()
+                    logging.debug(f"Complete processing in {end - start:f}seconds")
+                except KeyError as ke:
+                    logging.debug(f"Failed to parse the query: {str(ke)}")
+                    response_code = '404'
+                    response = b'Not Found\n'
+            else:
+                """Need this to local images and robots.txt"""
+                image_path = self.path
+                logging.debug(f"image path: {image_path}")
+                logging.debug(f"CWD: {os.getcwd()}")
+                if image_path in '/robots.txt':
+                    response_code = '404'
+                    response = b"Not Found"
+                    content_type = 'text/plain'
+                    for imgp in [image_path, '.' + image_path]:
+                        try:
+                            logging.debug(f"Try opening {imgp}")
+                            with open(imgp,'rb') as ip:
+                                response = ip.read()
+                                response_code = '200'
+                            break
+                        except FileNotFoundError:
+                            pass
+                elif image_path in '/favicon.ico':
+                    response_code = '404'
+                    response = b"Not Found"
+                    content_type = 'text/plain'
+                    for imgp in [image_path, '.' + image_path]:
+                        try:
+                            logging.debug(f"Try opening {imgp}")
+                            with open(imgp,'rb') as ip:
+                                response = ip.read()
+                                response_code = '200'
+                                content_type = 'image/vnd.microsoft.icon'
+                            break
+                        except FileNotFoundError:
+                            pass
+                else:
+                    response_code = '404'
+                    response = b"These aren't the droids you're looking for.\n"
+                    content_type = 'text/plain'
+            response_headers = [('Content-Type', content_type)]
+            response_headers.append(('Access-Control-Allow-Origin', '*'))
+            self.send_response(int(response_code))
+            for response_header in response_headers:
+                self.send_header(response_header[0], response_header[1])
+            self.end_headers()
+            self.wfile.write(response)
+        except BrokenPipeError:
+            logging.warning("Lost connection to client.")
+            pass
+
+    def do_OPTIONS(self):
+        response_headers = [ ('Access-Control-Allow-Methods', 'GET, OPTIONS'), ('Access-Control-Allow-Headers', '*')]
+        response_code = '200'
+        response = b''
+        logging.debug(f"OPTIONS respond, {response_headers}")
+        self.send_response(int(response_code))
+        for response_header in response_headers:
+            self.send_header(response_header[0], response_header[1])
+        self.end_headers()
+        self.wfile.write(response)
+
+#import ssl
+if __name__ == "__main__":        
+    logging.config.dictConfig(logging_cfg)
+    hostName = "0.0.0.0"
+    serverPort = 8040
+    webServer = HTTPServer((hostName, serverPort), wmsServer)
+    webServer.timeout = 600
+    # sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    # sslctx.check_hostname = False # If set to True, only the hostname that matches the certificate will be accepted
+    # sslctx.load_cert_chain(certfile='cert.pem', keyfile="key.pem")
+    # webServer.socket = sslctx.wrap_socket(webServer.socket, server_side=True)
+
+    print(webServer.request_queue_size)
+    print("Server started http://%s:%s" % (hostName, serverPort))
+
+    try:
+        webServer.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+    webServer.server_close()
+    print("Server stopped.")

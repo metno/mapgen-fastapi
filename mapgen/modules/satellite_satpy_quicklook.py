@@ -31,8 +31,8 @@ from glob import glob
 from datetime import datetime
 from urllib.parse import parse_qs
 
-from mapgen.modules.helpers import handle_request
-from mapgen.modules.helpers import HTTPError
+from modules.helpers import handle_request
+from modules.helpers import HTTPError
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)
@@ -258,7 +258,7 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     if not satpy_products:
         logger.debug(f"No products needs to be generated.")
         return True
-    logger.debug(f"Need to generate: {satpy_products}")
+    logger.debug(f"Need to generate: {satpy_products} from {netcdf_paths}")
     logger.debug(f"Before Scene")
     swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
     logger.debug(f"Before load, resolution: {resolution}")
