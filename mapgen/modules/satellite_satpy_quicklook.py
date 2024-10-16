@@ -260,7 +260,11 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
         return True
     logger.debug(f"Need to generate: {satpy_products} from {netcdf_paths}")
     logger.debug(f"Before Scene")
-    swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
+    try:
+        swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
+    except ValueError as ve:
+        logger.error(f"Scene creation failed with: {str(ve)}")
+        return False
     logger.debug(f"Before load, resolution: {resolution}")
     swath_scene.load(satpy_products, resolution=resolution)
     logger.debug(f"Available composites names: {swath_scene.available_composite_names()}")
