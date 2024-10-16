@@ -166,9 +166,20 @@ class wmsServer(BaseHTTPRequestHandler):
         dbg = [self.path, self.client_address, self.requestline, self.request, self.command, self.address_string()]
         for d in dbg:
             logging.debug(f"{d}")
+        url_scheme = 'http'
+        http_host = self.address_string()
         for h in str(self.headers).split('\n'):
             logging.debug(f"Header: {h}")
-
+            if h.startswith('X-Scheme') in h:
+                try:
+                    url_scheme = h.split(" ")[1]
+                except Exception:
+                    pass
+            if h.startswith('X-Forwarded-Host'):
+                try:
+                    http_host = h.split(" ")[1]
+                except Exception:
+                    pass
         try:
             q = Queue()
             if self.path.startswith('/api/get_quicklook'):
@@ -178,8 +189,8 @@ class wmsServer(BaseHTTPRequestHandler):
                         query_string = self.path.split('?')[1]
                     except IndexError:
                         query_string = ""
-                    url_scheme = os.environ.get('SCHEME', 'http')  # environ.get('HTTP_X_SCHEME', environ['wsgi.url_scheme'])
-                    http_host = os.environ.get('HOST_NAME', self.address_string())  # environ['HTTP_HOST']
+                    url_scheme = os.environ.get('SCHEME', url_scheme)  # environ.get('HTTP_X_SCHEME', environ['wsgi.url_scheme'])
+                    http_host = os.environ.get('HOST_NAME', http_host)  # environ['HTTP_HOST']
                     p = Process(target=start_processing,
                                 args=(netcdf_path,
                                     query_string,
