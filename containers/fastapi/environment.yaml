@@ -2,22 +2,23 @@ name: base
 channels:
 - conda-forge
 dependencies:
-- python=3.11
+- python=3.12
 - pip
 - wheel
 - Jinja2
-- gunicorn
+#- gunicorn
 - pyyaml
-- xarray=2024.6.0
+- xarray=2024.9.0 #=2024.6.0
 - boto3
 - netcdf4
 - jinja2
 - pytest-mock
 - rasterio
 - pandas
-- satpy=0.49.0
-- mapserver=8.0.2
-- gdal=3.9.0
+- satpy=0.51.0
+- mapserver=8.2.2
+- gdal=3.9.2  #3.9.0
+- libgdal=3.9.2
 - cartopy
 - metpy
 - lxml

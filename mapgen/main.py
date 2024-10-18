@@ -21,6 +21,7 @@ import os
 import time
 import logging
 import threading
+from random import randrange
 from multiprocessing import Process, Queue
 from modules.get_quicklook import get_quicklook
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -160,6 +161,18 @@ def app(environ, start_response):
     logging.debug(f"Queue length: {q.qsize()}")
     return [response]
 
+def terminate_process(obj):
+    """Terminate process"""
+    logging.debug(f"{obj}")
+    if obj.returncode is None:
+        child_pid = obj.pid
+        logging.error("This child pid is %s.", str(child_pid))
+        obj.kill()
+        logging.error("Process timed out and pre-maturely terminated.")
+    else:
+        logging.info("Process finished before time out.")
+    return
+
 class wmsServer(BaseHTTPRequestHandler):
     def send_response(self, code, message=None):
         """Add the response header to the headers buffer and log the
@@ -215,12 +228,19 @@ class wmsServer(BaseHTTPRequestHandler):
                     p.start()
                     end = time.time()
                     logging.debug(f"Started processing in {end - start:f}seconds")
-                    (response_code, response, content_type) = q.get()
-                    p.join()
-                    logging.debug(f"Returning successfully from query.")
+                    p.join(300)  # Timeout
+                    logging.debug(f"Processing exitcode: {p.exitcode}")
+                    if p.exitcode is None:
+                        logging.debug(f"Processing took too long. Stopping this process. Sorry.")
+                        p.terminate()
+                        response_code = '500'
+                        response = b'Processing took too long. Stopping this process. Sorry.\n'
+                    else:
+                        logging.debug(f"Returning successfully from query: {p.exitcode}")
+                        (response_code, response, content_type) = q.get()
+                        number_of_successfull_requests += 1
                     end = time.time()
                     logging.debug(f"Complete processing in {end - start:f}seconds")
-                    number_of_successfull_requests += 1
                 except KeyError as ke:
                     logging.debug(f"Failed to parse the query: {str(ke)}")
                     response_code = '404'
@@ -325,20 +345,24 @@ class request_limit_shutdown(threading.Thread):
         except KeyboardInterrupt:
             logging.info("Shutdown request_limit")
 
+class CustomHTTPServer(HTTPServer):
+    request_queue_size = 1
+
 if __name__ == "__main__":        
     logging.config.dictConfig(logging_cfg)
     hostName = "0.0.0.0"
     serverPort = 8040
-    webServer = HTTPServer((hostName, serverPort), wmsServer)
+    webServer = CustomHTTPServer((hostName, serverPort), wmsServer)
     webServer.timeout = 600
     number_of_successfull_requests = 0
 
-    print(webServer.request_queue_size)
-    print("Server started http://%s:%s" % (hostName, serverPort))
+    logging.info(f"request queue size: {webServer.request_queue_size}")
+    logging.info(f"Server started http://{hostName}:{serverPort}")
 
-    request_counter_thread = request_limit_shutdown(webServer, 10)
+    request_limit = randrange(50,100)
+    logging.debug(f"This server request_limit: {request_limit}")
+    request_counter_thread = request_limit_shutdown(webServer, request_limit)
     request_counter_thread.start()
-
     try:
         webServer.serve_forever()
     except KeyboardInterrupt:
