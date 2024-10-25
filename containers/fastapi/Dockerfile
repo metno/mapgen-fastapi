@@ -1,21 +1,25 @@
-FROM docker.io/mambaorg/micromamba:1.5.1-jammy
+FROM docker.io/mambaorg/micromamba:2.0.2-ubuntu24.04
+#FROM docker.io/mambaorg/micromamba:1.5.1-jammy
 
 LABEL maintainer="trygveas@met.no"
 
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
     MAPGEN_VERSION=httpserver
 
-COPY ./app /app
+#COPY ./app /app
 # Install dependencies:
-COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yaml /tmp/environment.yaml
+COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/environment.yaml /tmp/environment.yaml
 RUN micromamba install -y -n base --file /tmp/environment.yaml
 
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git lsof less\
-    && rm -rf /var/lib/apt/lists/*
-USER $MAMBA_USER
-RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
+# USER root
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     git lsof less curl \
+#     && rm -rf /var/lib/apt/lists/*
+#RUN curl --output /usr/share/keyrings/nginx-keyring.gpg https://unit.nginx.org/keys/nginx-keyring.gpg \
+#    && echo "deb [signed-by=/usr/share/keyrings/nginx-keyring.gpg] https://packages.nginx.org/unit/ubuntu/ noble unit\ndeb-src [signed-by=/usr/share/keyrings/nginx-keyring.gpg] https://packages.nginx.org/unit/ubuntu/ noble unit" > /etc/apt/sources.list.d/unit.list \
+#    && apt-get update \
+#    && apt-cache search unit \
+#    && apt-get install -y unit-python3.12
 
 #COPY --chown=$MAMBA_USER:$MAMBA_USER ./start.sh /start.sh
 
@@ -25,11 +29,113 @@ RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 #RUN chmod +x /start.sh \
 #    && chmod +x /start-reload.sh
 
+# USER root
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     git lsof less curl \
+#     && rm -rf /var/lib/apt/lists/*
+
+USER root
+RUN set -ex \
+    && savedAptMark="$(apt-mark showmanual)" \
+    && apt-get update \
+    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev curl pkg-config procps \
+    && mkdir -p /usr/lib/unit/modules /usr/lib/unit/debug-modules \
+    && mkdir -p /usr/src/unit \
+    && cd /usr/src/unit \
+    && git clone --depth 1 -b 1.33.0-1 https://github.com/nginx/unit \
+    && cd unit \
+    && NCPU="$(getconf _NPROCESSORS_ONLN)" \
+    && DEB_HOST_MULTIARCH="$(dpkg-architecture -q DEB_HOST_MULTIARCH)" \
+    && CC_OPT="$(DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" DEB_CFLAGS_MAINT_APPEND="-Wp,-D_FORTIFY_SOURCE=2 -fPIC" dpkg-buildflags --get CFLAGS)" \
+    && LD_OPT="$(DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" DEB_LDFLAGS_MAINT_APPEND="-Wl,--as-needed -pie" dpkg-buildflags --get LDFLAGS)" \
+    && CONFIGURE_ARGS_MODULES="--prefix=/usr \
+                --statedir=/var/lib/unit \
+                --control=unix:/var/run/control.unit.sock \
+                --runstatedir=/var/run \
+                --pid=/var/run/unit.pid \
+                --logdir=/var/log \
+                --log=/var/log/unit.log \
+                --tmpdir=/var/tmp \
+                --user=$MAMBA_USER \
+                --group=$MAMBA_USER \
+                --openssl \
+                --libdir=/usr/lib/$DEB_HOST_MULTIARCH" \
+    && CONFIGURE_ARGS="$CONFIGURE_ARGS_MODULES \
+                --njs" \
+    && make -j $NCPU -C pkg/contrib .njs \
+    && export PKG_CONFIG_PATH=$(pwd)/pkg/contrib/njs/build
+RUN cd /usr/src/unit/unit \
+    && ./configure $CONFIGURE_ARGS --cc-opt="$CC_OPT" --ld-opt="$LD_OPT" --modulesdir=/usr/lib/unit/debug-modules --debug \
+    && make -j $NCPU unitd \
+    && install -pm755 build/sbin/unitd /usr/sbin/unitd-debug \
+    && make clean \
+    && ./configure $CONFIGURE_ARGS --cc-opt="$CC_OPT" --ld-opt="$LD_OPT" --modulesdir=/usr/lib/unit/modules \
+    && make -j $NCPU unitd \
+    && install -pm755 build/sbin/unitd /usr/sbin/unitd \
+    && make clean \
+    && /bin/true \
+    && ./configure $CONFIGURE_ARGS_MODULES --cc-opt="$CC_OPT" --modulesdir=/usr/lib/unit/debug-modules --debug \
+    && ./configure python --config=/opt/conda/bin/python3-config \
+    && make -j $NCPU python3-install \
+    && make clean \
+    && ./configure $CONFIGURE_ARGS_MODULES --cc-opt="$CC_OPT" --modulesdir=/usr/lib/unit/modules \
+    && ./configure python --config=/opt/conda/bin/python3-config \
+    && make -j $NCPU python3-install \
+    && cd \
+    && rm -rf /usr/src/unit \
+    && for f in /usr/sbin/unitd /usr/lib/unit/modules/*.unit.so; do \
+        ldd $f | awk '/=>/{print $(NF-1)}' | while read n; do dpkg-query -S $n; done | sed 's/^\([^:]\+\):.*$/\1/' | sort | uniq >> /requirements.apt; \
+       done \
+    && apt-mark showmanual | xargs apt-mark auto > /dev/null \
+    && { [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; } \
+    && /bin/true \
+    && mkdir -p /var/lib/unit/ \
+    && mkdir -p /docker-entrypoint.d/ \
+    && apt-get update \
+    && apt-get --no-install-recommends --no-install-suggests -y install curl $(cat /requirements.apt) \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /requirements.apt \
+    && ln -sf /dev/stderr /var/log/unit.log
+
+    # && groupadd --gid 999 unit \
+    # && useradd \
+    #      --uid 999 \
+    #      --gid unit \
+    #      --no-create-home \
+    #      --home /nonexistent \
+    #      --comment "unit user" \
+    #      --shell /bin/false \
+    #      unit \
+
+USER $MAMBA_USER
+ARG FORCE_FROM_HERE=unknown
+RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
+USER root
+# RUN cd /
+# RUN mkdir -pv /usr/local/var/lib/unit/ && chown $MAMBA_USER:$MAMBA_USER /usr/local/var/lib/unit/
+# RUN ls -al /usr/sbin/unitd-debug && /usr/sbin/unitd-debug --help
 WORKDIR /app
 
 #EXPOSE 80
-
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/opt/conda/lib
 # Run the start script, it will check for an /app/prestart.sh script (e.g. for migrations)
 # And then will start Gunicorn with Uvicorn
 #CMD ["/start.sh"]
-CMD ["/opt/conda/bin/python", "/opt/conda/lib/python3.12/site-packages/mapgen/main.py"]
+#CMD ["/opt/conda/bin/python", "/opt/conda/lib/python3.12/site-packages/mapgen/main.py"]
+COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+#USER root
+#RUN chown "$MAMBA_USER":"$MAMBA_USER" /var/lib/unit
+RUN mkdir -pv /usr/share/unit/welcome && chown -R $MAMBA_USER:$MAMBA_USER /usr/share/unit
+COPY --chown=$MAMBA_USER:$MAMBA_USER welcome.* /usr/share/unit/welcome/
+#USER $MAMBA_USER
+#RUN chown unit:unit /var/lib/unit
+#RUN mkdir -pv /usr/share/unit/welcome && chown -R unit:unit /usr/share/unit
+#COPY --chown=unit:unit welcome.* /usr/share/unit/welcome/
+#USER $MAMBA_USER
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+#EXPOSE 80
+#RUN echo "After"
+#USER unit
+CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit.pid", "--log", "/var/log/unit.log"]
+#USER $MAMBA_USER
