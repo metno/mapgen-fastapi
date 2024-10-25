@@ -113,7 +113,7 @@ def app(environ, start_response):
         #     response_code = '404'
         #     response = "These aren't the droids you're looking for."
         #     content_type = 'text/plain'
-        if image_path in '/robots.txt':
+        if image_path == '/robots.txt':
             response_code = '404'
             response = b"Not Found"
             content_type = 'text/plain'
@@ -126,7 +126,7 @@ def app(environ, start_response):
                     break
                 except FileNotFoundError:
                     pass
-        elif image_path in '/favicon.ico':
+        elif image_path == '/favicon.ico':
             response_code = '404'
             response = b"Not Found"
             content_type = 'text/plain'
