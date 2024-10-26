@@ -36,9 +36,10 @@ RUN micromamba install -y -n base --file /tmp/environment.yaml
 
 USER root
 RUN set -ex \
+    && ln -s /opt/conda/bin/curl /usr/bin/curl \
     && savedAptMark="$(apt-mark showmanual)" \
     && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev curl pkg-config procps \
+    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps \
     && mkdir -p /usr/lib/unit/modules /usr/lib/unit/debug-modules \
     && mkdir -p /usr/src/unit \
     && cd /usr/src/unit \
@@ -46,7 +47,7 @@ RUN set -ex \
     && cd unit \
     && NCPU="$(getconf _NPROCESSORS_ONLN)" \
     && DEB_HOST_MULTIARCH="$(dpkg-architecture -q DEB_HOST_MULTIARCH)" \
-    && CC_OPT="$(DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" DEB_CFLAGS_MAINT_APPEND="-Wp,-D_FORTIFY_SOURCE=2 -fPIC" dpkg-buildflags --get CFLAGS)" \
+    && CC_OPT="$(DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" DEB_CFLAGS_MAINT_APPEND="-Wp,-D_FORTIFY_SOURCE=2 -fPIC $(dpkg-buildflags --get CFLAGS)")" \
     && LD_OPT="$(DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" DEB_LDFLAGS_MAINT_APPEND="-Wl,--as-needed -pie" dpkg-buildflags --get LDFLAGS)" \
     && CONFIGURE_ARGS_MODULES="--prefix=/usr \
                 --statedir=/var/lib/unit \
@@ -63,8 +64,7 @@ RUN set -ex \
     && CONFIGURE_ARGS="$CONFIGURE_ARGS_MODULES \
                 --njs" \
     && make -j $NCPU -C pkg/contrib .njs \
-    && export PKG_CONFIG_PATH=$(pwd)/pkg/contrib/njs/build
-RUN cd /usr/src/unit/unit \
+    && export PKG_CONFIG_PATH=$(pwd)/pkg/contrib/njs/build \
     && ./configure $CONFIGURE_ARGS --cc-opt="$CC_OPT" --ld-opt="$LD_OPT" --modulesdir=/usr/lib/unit/debug-modules --debug \
     && make -j $NCPU unitd \
     && install -pm755 build/sbin/unitd /usr/sbin/unitd-debug \
@@ -92,7 +92,7 @@ RUN cd /usr/src/unit/unit \
     && mkdir -p /var/lib/unit/ \
     && mkdir -p /docker-entrypoint.d/ \
     && apt-get update \
-    && apt-get --no-install-recommends --no-install-suggests -y install curl $(cat /requirements.apt) \
+    && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /requirements.apt \
@@ -109,7 +109,6 @@ RUN cd /usr/src/unit/unit \
     #      unit \
 
 USER $MAMBA_USER
-ARG FORCE_FROM_HERE=unknown
 RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 USER root
 # RUN cd /
@@ -118,7 +117,7 @@ USER root
 WORKDIR /app
 
 #EXPOSE 80
-ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/opt/conda/lib
+ENV LD_LIBRARY_PATH=/usr/local/lib:/opt/conda/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
 # Run the start script, it will check for an /app/prestart.sh script (e.g. for migrations)
 # And then will start Gunicorn with Uvicorn
 #CMD ["/start.sh"]

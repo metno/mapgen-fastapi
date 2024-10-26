@@ -15,7 +15,7 @@ dependencies:
 - pytest-mock
 - rasterio
 - pandas
-- satpy=0.51.0
+- satpy=0.52.1
 - mapserver=8.2.2
 - gdal=3.9.2  #3.9.0
 - libgdal=3.9.2
@@ -24,3 +24,4 @@ dependencies:
 - lxml
 - cmocean
 - pyspectral
+- curl
