@@ -78,6 +78,7 @@ USER $MAMBA_USER
 RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 USER root
 WORKDIR /app
+RUN cp -pv /opt/conda/lib/python3.12/site-packages/mapgen/favicon.ico /app
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:/opt/conda/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
