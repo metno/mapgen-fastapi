@@ -136,5 +136,5 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 #EXPOSE 80
 #RUN echo "After"
 #USER unit
-CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/unit/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit/unit.pid", "--log", "/var/log/unit.log"]
+CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/unit/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit/unit.pid", "--log", "/var/log/unit/unit.log"]
 #USER $MAMBA_USER
