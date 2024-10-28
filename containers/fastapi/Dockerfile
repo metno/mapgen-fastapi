@@ -54,8 +54,8 @@ RUN set -ex \
                 --control=unix:/var/run/unit/control.unit.sock \
                 --runstatedir=/var/run/unit \
                 --pid=/var/run/unit/unit.pid \
-                --logdir=/var/log \
-                --log=/var/log/unit.log \
+                --logdir=/var/log/unit \
+                --log=/var/log/unit/unit.log \
                 --tmpdir=/var/tmp \
                 --user=$MAMBA_USER \
                 --group=$MAMBA_USER \
@@ -95,8 +95,7 @@ RUN set -ex \
     && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/* \
-    && rm -f /requirements.apt \
-    && ln -sf /dev/stderr /var/log/unit.log
+    && rm -f /requirements.apt
 
     # && groupadd --gid 999 unit \
     # && useradd \
