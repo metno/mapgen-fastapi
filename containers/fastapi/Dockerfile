@@ -8,14 +8,15 @@ ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
 
 # Install dependencies:
 COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/environment.yaml /tmp/environment.yaml
-RUN micromamba install -y -n base --file /tmp/environment.yaml
+RUN micromamba install -y -n base --file /tmp/environment.yaml \
+    && micromamba clean --force-pkgs-dirs --yes
 
 USER root
 RUN set -ex \
     && ln -s /opt/conda/bin/curl /usr/bin/curl \
     && savedAptMark="$(apt-mark showmanual)" \
     && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps \
+    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps net-tools \
     && mkdir -p /usr/lib/unit/modules /usr/lib/unit/debug-modules \
     && mkdir -p /usr/src/unit \
     && cd /usr/src/unit \
