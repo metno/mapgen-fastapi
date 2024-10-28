@@ -22,14 +22,14 @@ curl_put()
 }
 
 if [ "$1" = "unitd" ] || [ "$1" = "unitd-debug" ]; then
-    echo "$0: $(ls -al /var/lib/unit/)"
-    /usr/bin/find "/var/lib/unit/" -mindepth 1 -print -quit 2>/dev/null
-    echo "After $?"
+    mkdir -pv /var/lib/unit
+    mkdir -pv /var/run/unit
+    mkdir -pv /var/log/unit
     if /usr/bin/find "/var/lib/unit/" -mindepth 1 -print -quit 2>/dev/null | /bin/grep -q .; then
         echo "$0: /var/lib/unit/ is not empty, skipping initial configuration..."
     else
         echo "$0: Launching Unit daemon to perform initial configuration..."
-        /usr/sbin/$1 --control unix:/var/run/unit/control.unit.sock --log /var/log/unit/unit.log --statedir /var/lib/unit --pid /var/run/unit/unit.pid
+        /usr/sbin/$1 --control unix:/var/run/unit/control.unit.sock --log /proc/1/fd/1 --statedir /var/lib/unit --pid /var/run/unit/unit.pid
 
         for i in $(/usr/bin/seq $WAITLOOPS); do
             if [ ! -S /var/run/unit/control.unit.sock ]; then

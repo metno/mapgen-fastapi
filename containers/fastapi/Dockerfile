@@ -4,35 +4,11 @@ FROM docker.io/mambaorg/micromamba:2.0.2-ubuntu24.04
 LABEL maintainer="trygveas@met.no"
 
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
-    MAPGEN_VERSION=httpserver
+    MAPGEN_VERSION=main
 
-#COPY ./app /app
 # Install dependencies:
 COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/environment.yaml /tmp/environment.yaml
 RUN micromamba install -y -n base --file /tmp/environment.yaml
-
-# USER root
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     git lsof less curl \
-#     && rm -rf /var/lib/apt/lists/*
-#RUN curl --output /usr/share/keyrings/nginx-keyring.gpg https://unit.nginx.org/keys/nginx-keyring.gpg \
-#    && echo "deb [signed-by=/usr/share/keyrings/nginx-keyring.gpg] https://packages.nginx.org/unit/ubuntu/ noble unit\ndeb-src [signed-by=/usr/share/keyrings/nginx-keyring.gpg] https://packages.nginx.org/unit/ubuntu/ noble unit" > /etc/apt/sources.list.d/unit.list \
-#    && apt-get update \
-#    && apt-cache search unit \
-#    && apt-get install -y unit-python3.12
-
-#COPY --chown=$MAMBA_USER:$MAMBA_USER ./start.sh /start.sh
-
-#COPY --chown=$MAMBA_USER:$MAMBA_USER ./gunicorn_conf.py /gunicorn_conf.py
-
-#COPY --chown=$MAMBA_USER:$MAMBA_USER ./start-reload.sh /start-reload.sh
-#RUN chmod +x /start.sh \
-#    && chmod +x /start-reload.sh
-
-# USER root
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     git lsof less curl \
-#     && rm -rf /var/lib/apt/lists/*
 
 USER root
 RUN set -ex \
@@ -97,43 +73,14 @@ RUN set -ex \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /requirements.apt
 
-    # && groupadd --gid 999 unit \
-    # && useradd \
-    #      --uid 999 \
-    #      --gid unit \
-    #      --no-create-home \
-    #      --home /nonexistent \
-    #      --comment "unit user" \
-    #      --shell /bin/false \
-    #      unit \
-
 USER $MAMBA_USER
 RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 USER root
-# RUN cd /
-# RUN mkdir -pv /usr/local/var/lib/unit/ && chown $MAMBA_USER:$MAMBA_USER /usr/local/var/lib/unit/
-# RUN ls -al /usr/sbin/unitd-debug && /usr/sbin/unitd-debug --help
 WORKDIR /app
 
-#EXPOSE 80
 ENV LD_LIBRARY_PATH=/usr/local/lib:/opt/conda/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
-# Run the start script, it will check for an /app/prestart.sh script (e.g. for migrations)
-# And then will start Gunicorn with Uvicorn
-#CMD ["/start.sh"]
-#CMD ["/opt/conda/bin/python", "/opt/conda/lib/python3.12/site-packages/mapgen/main.py"]
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-#USER root
-#RUN chown "$MAMBA_USER":"$MAMBA_USER" /var/lib/unit
 RUN mkdir -pv /usr/share/unit/welcome && chown -R $MAMBA_USER:$MAMBA_USER /usr/share/unit
 COPY --chown=$MAMBA_USER:$MAMBA_USER welcome.* /usr/share/unit/welcome/
-#USER $MAMBA_USER
-#RUN chown unit:unit /var/lib/unit
-#RUN mkdir -pv /usr/share/unit/welcome && chown -R unit:unit /usr/share/unit
-#COPY --chown=unit:unit welcome.* /usr/share/unit/welcome/
-#USER $MAMBA_USER
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-#EXPOSE 80
-#RUN echo "After"
-#USER unit
-CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/unit/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit/unit.pid", "--log", "/var/log/unit/unit.log"]
-#USER $MAMBA_USER
+CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/unit/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit/unit.pid", "--log", "/proc/1/fd/1"]
