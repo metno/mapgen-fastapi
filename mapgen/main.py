@@ -20,6 +20,8 @@ limitations under the License.
 import os
 import time
 import logging
+import threading
+from random import randrange
 from multiprocessing import Process, Queue
 from modules.get_quicklook import get_quicklook
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -111,7 +113,7 @@ def app(environ, start_response):
         #     response_code = '404'
         #     response = "These aren't the droids you're looking for."
         #     content_type = 'text/plain'
-        if image_path in '/robots.txt':
+        if image_path == '/robots.txt':
             response_code = '404'
             response = b"Not Found"
             content_type = 'text/plain'
@@ -124,7 +126,7 @@ def app(environ, start_response):
                     break
                 except FileNotFoundError:
                     pass
-        elif image_path in '/favicon.ico':
+        elif image_path == '/favicon.ico':
             response_code = '404'
             response = b"Not Found"
             content_type = 'text/plain'
@@ -159,8 +161,34 @@ def app(environ, start_response):
     logging.debug(f"Queue length: {q.qsize()}")
     return [response]
 
+def terminate_process(obj):
+    """Terminate process"""
+    logging.debug(f"{obj}")
+    if obj.returncode is None:
+        child_pid = obj.pid
+        logging.error("This child pid is %s.", str(child_pid))
+        obj.kill()
+        logging.error("Process timed out and pre-maturely terminated.")
+    else:
+        logging.info("Process finished before time out.")
+    return
+
 class wmsServer(BaseHTTPRequestHandler):
+    def send_response(self, code, message=None):
+        """Add the response header to the headers buffer and log the
+        response code.
+
+        Also send two standard headers with the server software
+        version and the current date.
+
+        """
+        self.log_request(code)
+        self.send_response_only(code, message)
+        self.send_header('Server', 'ogc-wms-from-netcdf')
+        self.send_header('Date', self.date_time_string())
+
     def do_GET(self):
+        global number_of_successfull_requests
         content_type = 'text/plain'
         start = time.time()
         dbg = [self.path, self.client_address, self.requestline, self.request, self.command, self.address_string()]
@@ -200,9 +228,17 @@ class wmsServer(BaseHTTPRequestHandler):
                     p.start()
                     end = time.time()
                     logging.debug(f"Started processing in {end - start:f}seconds")
-                    (response_code, response, content_type) = q.get()
-                    p.join()
-                    logging.debug(f"Returning successfully from query.")
+                    p.join(300)  # Timeout
+                    logging.debug(f"Processing exitcode: {p.exitcode}")
+                    if p.exitcode is None:
+                        logging.debug(f"Processing took too long. Stopping this process. Sorry.")
+                        p.terminate()
+                        response_code = '500'
+                        response = b'Processing took too long. Stopping this process. Sorry.\n'
+                    else:
+                        logging.debug(f"Returning successfully from query: {p.exitcode}")
+                        (response_code, response, content_type) = q.get()
+                        number_of_successfull_requests += 1
                     end = time.time()
                     logging.debug(f"Complete processing in {end - start:f}seconds")
                 except KeyError as ke:
@@ -267,25 +303,72 @@ class wmsServer(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response)
 
-#import ssl
+
+def request_counter(web_server, request_limit):
+    while 1:
+        try:
+            if number_of_successfull_requests > request_limit:
+                logging.info("Request limit reach, shutting down...")
+                web_server.shutdown()
+                logging.info("Shutting down complete.")
+                break
+            logging.info(f"Number of requests {number_of_successfull_requests} of {request_limit}")
+            time.sleep(1)
+        except KeyboardInterrupt:
+            break
+
+class request_limit_shutdown(threading.Thread):
+
+    """"""
+
+    def __init__(self, web_server, request_limit):
+        threading.Thread.__init__(self)
+        self.loop = True
+        self.web_server = web_server
+        self.request_limit = request_limit
+
+    def stop(self):
+        """Stops the request_limit loop"""
+        self.loop = False
+
+    def run(self):
+        try:
+            self.loop = True
+            while self.loop:
+                if number_of_successfull_requests > self.request_limit:
+                    logging.info("Request limit reach, shutting down...")
+                    self.web_server.shutdown()
+                    logging.info("Shutting down complete.")
+                    self.loop = False
+                logging.info(f"Number of requests {number_of_successfull_requests} of {self.request_limit}")
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logging.info("Shutdown request_limit")
+
+class CustomHTTPServer(HTTPServer):
+    request_queue_size = 1
+
 if __name__ == "__main__":        
     logging.config.dictConfig(logging_cfg)
     hostName = "0.0.0.0"
     serverPort = 8040
-    webServer = HTTPServer((hostName, serverPort), wmsServer)
+    webServer = CustomHTTPServer((hostName, serverPort), wmsServer)
     webServer.timeout = 600
-    # sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    # sslctx.check_hostname = False # If set to True, only the hostname that matches the certificate will be accepted
-    # sslctx.load_cert_chain(certfile='cert.pem', keyfile="key.pem")
-    # webServer.socket = sslctx.wrap_socket(webServer.socket, server_side=True)
+    number_of_successfull_requests = 0
 
-    print(webServer.request_queue_size)
-    print("Server started http://%s:%s" % (hostName, serverPort))
+    logging.info(f"request queue size: {webServer.request_queue_size}")
+    logging.info(f"Server started http://{hostName}:{serverPort}")
 
+    request_limit = randrange(50,100)
+    logging.debug(f"This server request_limit: {request_limit}")
+    request_counter_thread = request_limit_shutdown(webServer, request_limit)
+    request_counter_thread.start()
     try:
         webServer.serve_forever()
     except KeyboardInterrupt:
+        request_counter_thread.stop()
         pass
 
+    request_counter_thread.join()
     webServer.server_close()
     print("Server stopped.")

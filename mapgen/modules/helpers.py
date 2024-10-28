@@ -475,11 +475,14 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     if 'time' not in ds[variable].dims:
-        try:
-            valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
-            layer.metadata.set("wms_timeextent", f'{valid_time}')
-        except Exception:
-            logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
+        logger.debug(f"variable {variable} do not contain time variable. wms_timeextent as dimension is not added.")
+        # It makes no sense to add time dimension to a variable without timedimension. It can never be found.
+        # Removed from code 2024-10-23
+        # try:
+        #     valid_time = datetime.datetime.fromisoformat(ds.time_coverage_start).strftime('%Y-%m-%dT%H:%M:%SZ')
+        #     layer.metadata.set("wms_timeextent", f'{valid_time}')
+        # except Exception:
+        #     logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
         if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
@@ -750,12 +753,13 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
             _ds['ds_size'] = ds[dim_name].data.size
             _ds['selected_band_number'] = 0
             dimension_search.append(_ds)
-    logger.debug(f"{dimension_search}")
+    logger.debug(f"Dimension Search: {dimension_search}")
     return dimension_search
 
 def _calc_band_number_from_dimensions(dimension_search):
     band_number = 0
     first = True
+    logger.debug(f"Calculate band number from dimension: {dimension_search}")
     #dimension_search.reverse()
     for _ds in dimension_search[::-1]:
         if first:
@@ -765,6 +769,9 @@ def _calc_band_number_from_dimensions(dimension_search):
         first = False
         prev_ds = _ds
 
+    if band_number == 0 and len(dimension_search) == 0:
+        logger.warning("Could not calculate band number from empty dimension search. Use 1.")
+        band_number = 1
     logger.debug(f"selected band number {band_number}")
     return band_number
 
@@ -1215,7 +1222,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
     else:
         logger.debug(f"Dimmension search len {len(dimension_search)}")
-        if len(dimension_search) == 1:
+        if len(dimension_search) == 0:
+            logger.debug("Len 0")
+            min_val = np.nanmin(ds[actual_variable][:,:].data)
+            max_val = np.nanmax(ds[actual_variable][:,:].data)
+        elif len(dimension_search) == 1:
             logger.debug("Len 1")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
@@ -1260,7 +1271,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             logger.debug("Dimension search empty. Possible calculated field.")
         else:
             logger.error(f"Could not estimate or read min and/or max val of dataset: {actual_variable}")
-        logger.debug(f"MIN:MAX {min_val} {max_val}")
+        try:
+            logger.debug(f"MIN:MAX {min_val} {max_val}")
+        except UnboundLocalError as le:
+            logger.error(f"status_code=500, Failed with: {str(le)}.")
+            raise HTTPError(response_code='500', response=f"Unspecified internal server error.")
         #Grayscale
         if style in 'contour': #variable.endswith('_contour'):
             logger.debug("Style in contour for style setup.")
