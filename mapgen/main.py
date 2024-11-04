@@ -23,7 +23,7 @@ import logging
 import threading
 from random import randrange
 from multiprocessing import Process, Queue
-from modules.get_quicklook import get_quicklook
+from mapgen.modules.get_quicklook import get_quicklook
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 logging_cfg = {
@@ -101,7 +101,7 @@ def app(environ, start_response):
             logging.debug(f"Complete processing in {end - start:f}seconds")
         except KeyError as ke:
             logging.debug(f"Failed to parse the query: {str(ke)}")
-            response_code = '404'
+            response_code = '404 Not Found'
             response = b'Not Found\n'
         response_headers = [('Content-Type', content_type)]
     elif environ['REQUEST_METHOD'] == 'GET':
@@ -122,7 +122,7 @@ def app(environ, start_response):
                     logging.debug(f"Try opening {imgp}")
                     with open(imgp,'rb') as ip:
                         response = ip.read()
-                        response_code = '200'
+                        response_code = '200 OK'
                     break
                 except FileNotFoundError:
                     pass
@@ -135,13 +135,13 @@ def app(environ, start_response):
                     logging.debug(f"Try opening {imgp}")
                     with open(imgp,'rb') as ip:
                         response = ip.read()
-                        response_code = '200'
+                        response_code = '200 OK'
                         content_type = 'image/vnd.microsoft.icon'
                     break
                 except FileNotFoundError:
                     pass
         else:
-            response_code = '404'
+            response_code = '404 Not Found'
             response = b"These aren't the droids you're looking for.\n"
             content_type = 'text/plain'
         response_headers = [('Content-Type', content_type)]
@@ -152,7 +152,7 @@ def app(environ, start_response):
         response = b''
         logging.debug(f"OPTIONS respond, {response_headers}")
     else:
-        response_code = '400'
+        response_code = '400 Bad Request'
         response = b"Your are not welcome here!\n"
         response_headers = [('Content-Type', content_type)]
         logging.debug(f"{response_code}, {response}, {content_type}")
