@@ -183,7 +183,7 @@ def handle_request(map_object, full_request):
         result = dom.toprettyxml(indent="", newl="").encode()
         mapscript.msIO_resetHandlers()
     logger.info(f"status_code=200, mapscript return successfully.")
-    response_code = '200'
+    response_code = '200 OK'
     return response_code, result, content_type
 
 def _get_speed(x_vector: xr.DataArray, y_vector: xr.DataArray, standard_name: str) -> xr.DataArray:

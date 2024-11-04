@@ -41,10 +41,10 @@ import datetime
 import mapscript
 
 import xarray as xr
-from modules.create_symbol_file import create_symbol_file
-from modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
-from modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from modules.helpers import _parse_request, _read_netcdfs_from_ncml, HTTPError
+from mapgen.modules.create_symbol_file import create_symbol_file
+from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _parse_filename, _get_mapfiles_path
+from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
+from mapgen.modules.helpers import _parse_request, _read_netcdfs_from_ncml, HTTPError
 
 grid_mapping_cache = {}
 summary_cache = {}
@@ -90,10 +90,10 @@ def generic_quicklook(netcdf_path: str,
                 is_ncml = True
         except Exception as e:
             logger.error(f"status_code=500, Can not open file. Either not existing or ncml file: {e}")
-            raise HTTPError(response_code='500', response=f"Can not open file. Either not existing or ncml file: {e}")
+            raise HTTPError(response_code='500 Internal Server Error', response=f"Can not open file. Either not existing or ncml file: {e}")
     except FileNotFoundError:
         logger.error(f"status_code=500, File Not Found: {netcdf_path}.")
-        raise HTTPError(response_code='500', response=f"File Not Found: {orig_netcdf_path}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"File Not Found: {orig_netcdf_path}.")
 
     #get forecast reference time from dataset
     try:
@@ -190,7 +190,7 @@ def generic_quicklook(netcdf_path: str,
         logger.error(f"status_code=500, Could not find any variables to turn into OGC WMS layers. One "
                      "reason can be your data does not have a valid grid_mapping (Please see CF "
                      "grid_mapping), or internal resampling failed.")
-        raise HTTPError(response_code='500', response=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
+        raise HTTPError(response_code='500 Internal Server Error', response=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
                                                      "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
