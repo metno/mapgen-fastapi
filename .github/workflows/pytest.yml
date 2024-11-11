@@ -32,9 +32,14 @@ jobs:
       - name: Update environment
         run: mamba env update -n test-environment -f continuous_integration/environment.yaml
         if: steps.cache.outputs.cache-hit != 'true'
-
+      - name: Run unit tests
+        shell: bash -l {0}
+        run: |
+          ls -al;
+          pwd;
+          python -v
       - name: Run Tests
-        run: python3 -m pytest -v --cov=./ --cov-report=xml --timeout=60
+        run: pytest -v --cov=./ --cov-report=xml --timeout=60
       - name: Upload to Codecov
         uses: codecov/codecov-action@v2
         with:
