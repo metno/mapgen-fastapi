@@ -31,8 +31,8 @@ from glob import glob
 from datetime import datetime
 from urllib.parse import parse_qs
 
-from modules.helpers import handle_request
-from modules.helpers import HTTPError
+from mapgen.modules.helpers import handle_request
+from mapgen.modules.helpers import HTTPError
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)
@@ -85,11 +85,8 @@ def generate_satpy_quicklook(netcdf_path: str,
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPError(response_code='500', response="Missing base dir in server config.")
+        raise HTTPError(response_code='500 Internal Server Error', response="Missing base dir in server config.")
 
-    if not netcdf_path:
-        logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
-        raise HTTPError(response_code='404', response="Missing netcdf path.")
     logger.debug(f"{satpy_products}")
 
     resolution = None
@@ -118,23 +115,23 @@ def generate_satpy_quicklook(netcdf_path: str,
     try:
         if not _generate_satpy_geotiff(similar_netcdf_paths, satpy_products_to_generate, start_time, product_config, resolution):
             logger.error(f"status_code=500, Some part of the generate failed.")
-            raise HTTPError(response_code='500', response="Some part of the generate failed.")
+            raise HTTPError(response_code='500 Internal Server Error', response="Some part of the generate failed.")
     except KeyError as ke:
         if 'Unknown datasets' in str(ke):
             logger.error(f"status_code=500, Layer can not be made for this dataset {str(ke)}")
-            raise HTTPError(response_code='500', response=f"Layer can not be made for this dataset {str(ke)}")
+            raise HTTPError(response_code='500 Internal Server Error', response=f"Layer can not be made for this dataset {str(ke)}")
 
     map_object = mapscript.mapObj()
     _fill_metadata_to_mapfile(orig_netcdf_path, map_object, url_scheme, http_host)
 
     for satpy_product in satpy_products_to_generate:
         layer = mapscript.layerObj()
-        _generate_layer(start_time,
+        if _generate_layer(start_time,
                         satpy_product['satpy_product'],
                         satpy_product['satpy_product_filename'],
                         satpy_product['bucket'],
-                        layer)
-        layer_no = map_object.insertLayer(layer)
+                        layer):
+            layer_no = map_object.insertLayer(layer)
     map_object.save(os.path.join(_get_mapfiles_path(product_config), f'satpy-products-{start_time:%Y%m%d%H%M%S}.map'))
     return handle_request(map_object, query_string)
 
@@ -147,13 +144,12 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     except rasterio.errors.RasterioIOError:
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
-        return None
+        return False
     bounds = dataset.bounds
     ll_x = bounds[0]
     ll_y = bounds[1]
     ur_x = bounds[2]
     ur_y = bounds[3]
-
     layer.setProjection(dataset.crs.to_proj4())
     layer.status = 1
     layer.data = f'/vsis3/{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}'
@@ -166,6 +162,7 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     dataset.close()
     dataset = None
     logger.debug(f"Complete generate layer")
+    return True
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, url_scheme, netloc):
     """"Add all needed web metadata to the generated map file."""
@@ -182,7 +179,21 @@ def _generate_key(start_time, satpy_product_filename):
     return os.path.join(f'{start_time:%Y/%m/%d}', os.path.basename(satpy_product_filename))
 
 def _upload_geotiff_to_ceph(filenames, start_time, product_config):
+    """Uploads the generated GeoTIFF files to the configured S3/CEPH object store.
 
+    Args:
+        filenames (list): A list of dictionaries, where each dictionary contains the following keys:
+            - 'satpy_product_filename': The filename of the GeoTIFF file to be uploaded.
+            - 'bucket': The name of the S3/CEPH bucket to upload the file to.
+        start_time (datetime): The start time of the satellite data, used to generate the S3/CEPH object key.
+        product_config (dict): A dictionary containing configuration options, including the path to the temporary GeoTIFF directory.
+
+    Returns:
+        bool: True if the upload was successful
+
+    Raises:
+        HTTPError: If there was an error uploading the file to S3/CEPH.
+    """
     logger.debug(f"Upload: {str(filenames)}")
     s3_client = boto3.client(service_name='s3',
                              endpoint_url=os.environ['S3_ENDPOINT_URL'],
@@ -211,7 +222,7 @@ def _upload_geotiff_to_ceph(filenames, start_time, product_config):
         exc_info = sys.exc_info()
         traceback.print_exception(*exc_info)
         logger.error(f"status_code=500, Failed to upload file to s3.")
-        raise HTTPError(response_code='500', response="Failed to upload file to s3.")
+        raise HTTPError(response_code='500 Internal Server Error', response="Failed to upload file to s3.")
     finally:
         s3_client.close()
         del s3_client
@@ -262,7 +273,8 @@ def _generate_satpy_geotiff(netcdf_paths, satpy_products_to_generate, start_time
     logger.debug(f"Before Scene")
     try:
         swath_scene = Scene(filenames=netcdf_paths, reader='satpy_cf_nc')
-    except ValueError as ve:
+    except (ValueError, OSError) as ve:
+        traceback.print_exc()
         logger.error(f"Scene creation failed with: {str(ve)}")
         return False
     logger.debug(f"Before load, resolution: {resolution}")
@@ -336,7 +348,7 @@ def _parse_filename(netcdf_path, product_config):
     else:
         logger.debug(f"No match: {netcdf_path}")
         logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
-        raise HTTPError(response_code='500', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _search_for_similar_netcdf_paths(path, platform_name, start_time, end_time, netcdf_path):
     if 'fy3d' in platform_name or 'aqua' in platform_name or 'terra' in platform_name:

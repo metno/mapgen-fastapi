@@ -43,7 +43,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 class HTTPError(Exception):
-    def __init__(self, response_code='500', response=b'', content_type='text/plain'):
+    def __init__(self, response_code='500 Internal Server Error', response=b'', content_type='text/plain'):
         self.response_code = response_code
         self.response = response.encode()
         self.content_type = content_type
@@ -96,11 +96,11 @@ def find_config_for_this_netcdf(netcdf_path):
             traceback.print_exception(*exc_info)
             response = f"Exception raised when regexp. Check the config."
             logger.error(response)
-            response_code = '500'
+            response_code = '500 Internal Server Error'
     if not regexp_pattern_module:
         response = f"The server have no setup to handle the requested file {netcdf_path}. Check with the maintainers if this could be added."
         logger.error(response)
-        response_code = '501'
+        response_code = '501 Not Implemented'
 
     return regexp_pattern_module, response.encode(), response_code, content_type
 
@@ -115,7 +115,7 @@ def handle_request(map_object, full_request):
         logger.debug(f"Full request string: {full_request_string}")
     except Exception as e:
         logger.error(f"status_code=500, failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
-        raise HTTPError(response_code='500',
+        raise HTTPError(response_code='500 Internal Server Error',
                         response=f"failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
     if 'request=getlegendgraphic' in full_request_string.lower():
         if not 'sld_version' in full_request_string.lower():
@@ -163,7 +163,7 @@ def handle_request(map_object, full_request):
             map_object.OWSDispatch( ows_req )
         except Exception as e:
             logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
-            raise HTTPError(response_code='500',
+            raise HTTPError(response_code='500 Internal Server Error',
                             response=f"mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
         result = mapscript.msIO_getStdoutBufferBytes()
@@ -183,7 +183,7 @@ def handle_request(map_object, full_request):
         result = dom.toprettyxml(indent="", newl="").encode()
         mapscript.msIO_resetHandlers()
     logger.info(f"status_code=200, mapscript return successfully.")
-    response_code = '200'
+    response_code = '200 OK'
     return response_code, result, content_type
 
 def _get_speed(x_vector: xr.DataArray, y_vector: xr.DataArray, standard_name: str) -> xr.DataArray:
@@ -717,7 +717,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
                             time_as_band += 1
                         else:
                             logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
-                            raise HTTPError(response_code='500', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                            raise HTTPError(response_code='500 Internal Server Error', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
                 else:
@@ -733,7 +733,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
                         selected_band_no += 1
                     else:
                         logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
-                        raise HTTPError(response_code='500', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                        raise HTTPError(response_code='500 Internal Server Error', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = selected_band_no
                     dimension_search.append(_ds)
                 break
@@ -1070,7 +1070,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             logger.debug(f"Could not find the ncml xml input file {netcdf_file}.")
         except Exception:
             logger.error(f"status_code=500, Failed to parse ncml file to find individual file.")
-            raise HTTPError(response_code='500', response=f"Failed to parse ncml file to find individual file.")
+            raise HTTPError(response_code='500 Internal Server Error', response=f"Failed to parse ncml file to find individual file.")
 
     elif grid_mapping_name == 'calculated_omerc':
         logger.debug("Try to resample data on the fly and using gdal vsimem.")
@@ -1275,7 +1275,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             logger.debug(f"MIN:MAX {min_val} {max_val}")
         except UnboundLocalError as le:
             logger.error(f"status_code=500, Failed with: {str(le)}.")
-            raise HTTPError(response_code='500', response=f"Unspecified internal server error.")
+            raise HTTPError(response_code='500 Internal Server Error', response=f"Unspecified internal server error.")
         #Grayscale
         if style in 'contour': #variable.endswith('_contour'):
             logger.debug("Style in contour for style setup.")
@@ -1433,7 +1433,7 @@ def _parse_filename(netcdf_path, product_config):
         return mtchs.groups()
     else:
         logger.error(f"status_code=500, No file name match: {netcdf_path}, match string {pattern_match}.")
-        raise HTTPError(response_code='500', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"No file name match: {netcdf_path}, match string {pattern_match}.")
 
 def _get_mapfiles_path(regexp_pattern_module):
     try:

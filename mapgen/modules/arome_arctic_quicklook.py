@@ -40,10 +40,10 @@ import logging
 import datetime
 import mapscript
 import xarray as xr
-from modules.create_symbol_file import create_symbol_file
-from modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
-from modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
-from modules.helpers import _parse_request, HTTPError
+from mapgen.modules.create_symbol_file import create_symbol_file
+from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfiles_path, _fill_metadata_to_mapfile
+from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
+from mapgen.modules.helpers import _parse_request, HTTPError
 
 grid_mapping_cache = {}
 wind_rotation_cache = {}
@@ -65,14 +65,11 @@ def arome_arctic_quicklook(netcdf_path: str,
         netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPError(response_code='500', response="Missing base dir in server config.")
+        raise HTTPError(response_code='500 Internal Server Error', response="Missing base dir in server config.")
 
-    if not netcdf_path:
-        logger.error(f"status_code=404, Missing netcdf path")
-        raise HTTPError(response_code='404', response="Missing netcdf path")
     if not os.path.exists(netcdf_path):
         logger.error(f"status_code=404, Could not find {orig_netcdf_path} in server configured directory.")
-        raise HTTPError(response_code='404', response=f"Could not find {orig_netcdf_path} in server configured directory.")
+        raise HTTPError(response_code='404 Not Found', response=f"Could not find {orig_netcdf_path} in server configured directory.")
 
     ds_disk = xr.open_dataset(netcdf_path)
 
@@ -84,7 +81,7 @@ def arome_arctic_quicklook(netcdf_path: str,
         # Parse the netcdf filename to get start time or reference time
         _, _forecast_time = _parse_filename(netcdf_path, product_config)
         forecast_time = datetime.datetime.strptime(_forecast_time, "%Y%m%dT%H")
-        logger.debug(f"{forecast_time}")
+        logger.debug(f"Forecast time: {forecast_time}")
 
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)

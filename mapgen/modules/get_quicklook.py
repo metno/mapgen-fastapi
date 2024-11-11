@@ -20,11 +20,11 @@ limitations under the License.
 import sys
 import logging
 
-from modules.helpers import find_config_for_this_netcdf, HTTPError
+from mapgen.modules.helpers import find_config_for_this_netcdf, HTTPError
 
-import modules.arome_arctic_quicklook
-import modules.generic_quicklook
-import modules.satellite_satpy_quicklook
+import mapgen.modules.arome_arctic_quicklook
+import mapgen.modules.generic_quicklook
+import mapgen.modules.satellite_satpy_quicklook
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def get_quicklook(netcdf_path: str,
     netcdf_path = netcdf_path.replace("//", "/")
     logger.debug(f'{netcdf_path}')
     if not netcdf_path:
-        response_code = '404'
+        response_code = '404 Not Found'
         response = b'Missing netcdf path\n'
         content_type = 'text/plain'
     else:        
@@ -60,5 +60,10 @@ def get_quicklook(netcdf_path: str,
                 response = (f"Failed to load function {product_config['module_function']} " 
                             f"from module {product_config['module']}. "
                             "Check the server config.")
+                content_type = 'text/plain'
+            except OSError as oe:
+                logger.debug(f"Unable to access netcdf file {netcdf_path}: {str(oe)}")
+                response_code = '404 Not Found'
+                response = (f"Unable to access netcdf file {netcdf_path}.")
                 content_type = 'text/plain'
     return response_code, response, content_type
