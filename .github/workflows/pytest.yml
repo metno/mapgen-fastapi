@@ -34,7 +34,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Run Tests
-        run: python -m pytest -v --cov=./ --cov-report=xml --timeout=60
+        run: python3 -m pytest -v --cov=./ --cov-report=xml --timeout=60
       - name: Upload to Codecov
         uses: codecov/codecov-action@v2
         with:

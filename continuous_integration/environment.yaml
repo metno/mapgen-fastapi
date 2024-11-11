@@ -12,10 +12,9 @@ dependencies:
   - satpy
   - mapserver
   - cmocean
+  - pytest
+  - pytest-cov
   - pip
   - pip:
     - pytest-lazy-fixtures
     - pytest-timeout
-    - pytest
-    - pytest-cov
- 
