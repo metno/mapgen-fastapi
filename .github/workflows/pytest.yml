@@ -23,7 +23,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r test-requirements.txt
           pip install pytest-timeout
           pip install pytest-cov
       - name: Run Tests

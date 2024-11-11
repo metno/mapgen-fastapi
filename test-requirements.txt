@@ -1,0 +1,12 @@
+python==3.11
+jinja2
+pyyaml
+pytest-mock
+uvicorn
+requests
+fastapi
+boto3
+rasterio
+satpy
+mapserver
+cmocean
