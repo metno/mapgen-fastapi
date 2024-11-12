@@ -148,7 +148,7 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
     url_scheme = "http"
     mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
-                                 'base_netcdf_directory': '.',
+                                 'base_netcdf_directory': os.getcwd(),
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
                                  'mapfile_template': os.path.join(tmpdir, 'test.map'),
