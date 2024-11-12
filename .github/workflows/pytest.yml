@@ -50,6 +50,8 @@ jobs:
           pwd;
           ls -al;
           ls -al tests/data;
+          mamba list;
+          pip list;
       - name: Run Tests
         shell: bash -l {0}
         run: |
