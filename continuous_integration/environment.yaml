@@ -13,6 +13,7 @@ dependencies:
   - mapserver
   - gdal
   - cmocean
+  - lxml
   - pip
   - pip:
     - pytest-lazy-fixtures
