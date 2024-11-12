@@ -82,15 +82,16 @@ def test_options():
     assert res.status == '200 OK'
     assert res.body == b""
 
-def test_get_quicklook_test1():
+def test_get_quicklook_test1(caplog):
     """Test for a none existing netcdf file"""
     test_app = TestApp(app)
 
+    caplog.set_level(logging.DEBUG)
     res = test_app.get('/api/get_quicklook/test1.nc', status='*')
     sys.stderr.write(res.status)
     print(res.status)
     print(res.body)
-    assert res.status == '500 Internal Server Error'
+    assert res.status == 'X00 Internal Server Error'
     assert res.body == b"File Not Found: /test1.nc."
 
 @patch('mapgen.modules.satellite_satpy_quicklook._generate_satpy_geotiff')
