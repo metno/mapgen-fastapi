@@ -91,7 +91,7 @@ def test_get_quicklook_test1(caplog):
     sys.stderr.write(res.status)
     print(res.status)
     print(res.body)
-    assert res.status == 'X00 Internal Server Error'
+    assert res.status == '500 Internal Server Error'
     assert res.body == b"File Not Found: /test1.nc."
 
 @patch('mapgen.modules.satellite_satpy_quicklook._generate_satpy_geotiff')
