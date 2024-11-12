@@ -52,7 +52,9 @@ jobs:
           which python;
           which pytest;
       - name: Run Tests
-        run: pytest -v --cov=./ --cov-report=xml --timeout=60
+        shell: bash -l {0}
+        run: |
+          pytest -v --cov=./ --cov-report=xml --timeout=60
       - name: Upload to Codecov
         uses: codecov/codecov-action@v2
         with:
