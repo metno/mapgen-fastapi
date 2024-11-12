@@ -46,8 +46,10 @@ jobs:
       - name: Install mapgen
         shell: bash -l {0}
         run: |
-          python -m pip install --no-deps -e .
-
+          python -m pip install --no-deps -e .:
+          pwd;
+          ls -al;
+          ls -al tests/data;
       - name: Run Tests
         shell: bash -l {0}
         run: |
