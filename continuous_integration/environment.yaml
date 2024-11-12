@@ -1,0 +1,28 @@
+name: test-environment
+channels:
+  - conda-forge
+dependencies:
+  - jinja2
+  - pyyaml
+  - pytest-mock
+  - uvicorn
+  - requests
+  - boto3
+  - rasterio
+  - satpy
+  - mapserver
+  - gdal
+  - libgdal
+  - cmocean
+  - lxml
+  - cartopy
+  - metpy
+  - pandas
+  - pip
+  - pip:
+    - pytest-lazy-fixtures
+    - pytest-timeout
+    - pytest
+    - pytest-cov
+    - WebTest
+ 

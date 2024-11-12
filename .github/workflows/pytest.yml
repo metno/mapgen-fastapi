@@ -12,6 +12,10 @@ jobs:
       matrix:
         python-version: [3.9, '3.10', '3.11', '3.12']
     runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+      OS: ${{ matrix.os }}
+ 
     steps:
       - name: Python Setup
         uses: actions/setup-python@v2
@@ -20,16 +24,35 @@ jobs:
           architecture: x64
       - name: Checkout Source
         uses: actions/checkout@v2
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest-timeout
-          pip install pytest-cov
-      - name: Run Tests
-        run: python -m pytest -v --cov=./ --cov-report=xml --timeout=60
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v2
+      - name: Setup Conda Environment
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          fail_ci_if_error: true
+          miniforge-version: latest
+          python-version: ${{ matrix.python-version }}
+          activate-environment: test-environment
+          channels: conda-forge
+          conda-remove-defaults: true
+          channel-priority: strict
+      - name: Set cache environment variables
+        shell: bash -l {0}
+        run: |
+          echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          CONDA_PREFIX=$(python -c "import sys; print(sys.prefix)")
+          echo "CONDA_PREFIX=$CONDA_PREFIX" >> $GITHUB_ENV
+      - name: Update environment
+        run: mamba env update -n test-environment -f continuous_integration/environment.yaml
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - name: Install mapgen
+        shell: bash -l {0}
+        run: |
+          python -m pip install --no-deps -e .;
+      - name: Run Tests
+        shell: bash -l {0}
+        run: |
+          pytest -v --cov=./ --cov-report=xml --timeout=60
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos

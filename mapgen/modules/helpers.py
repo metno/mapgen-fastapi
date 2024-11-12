@@ -160,6 +160,7 @@ def handle_request(map_object, full_request):
             logger.debug("STYLES not in the request. Nothing to reset.")
             pass
         try:
+            logger.debug(f"PWD {os.getcwd()}")
             map_object.OWSDispatch( ows_req )
         except Exception as e:
             logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
