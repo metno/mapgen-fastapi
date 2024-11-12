@@ -12,6 +12,10 @@ jobs:
       matrix:
         python-version: [3.9, '3.10', '3.11', '3.12']
     runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+      OS: ${{ matrix.os }}
+ 
     steps:
       - name: Python Setup
         uses: actions/setup-python@v2
@@ -29,6 +33,12 @@ jobs:
           channels: conda-forge
           conda-remove-defaults: true
           channel-priority: strict
+      - name: Set cache environment variables
+        shell: bash -l {0}
+        run: |
+          echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          CONDA_PREFIX=$(python -c "import sys; print(sys.prefix)")
+          echo "CONDA_PREFIX=$CONDA_PREFIX" >> $GITHUB_ENV
       - name: Update environment
         run: mamba env update -n test-environment -f continuous_integration/environment.yaml
         if: steps.cache.outputs.cache-hit != 'true'
@@ -37,7 +47,10 @@ jobs:
         run: |
           ls -al;
           pwd;
-          python -v
+          python -v;
+          env;
+          which python;
+          which pytest;
       - name: Run Tests
         run: pytest -v --cov=./ --cov-report=xml --timeout=60
       - name: Upload to Codecov
