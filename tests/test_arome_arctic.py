@@ -31,12 +31,14 @@ def _create_arome_arctic_dataset_from_orig_data_without_reference_time():
     ds_trimmed.to_netcdf("test_arome_arctic_without_forecast_time_20241111T06Z.nc")
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_read_dataset(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_read_dataset(mock_csw, mock_read_config, tmpdir, caplog):
     """Test reading the dataset"""
     netcdf_path = "tests/data/test_arome_arctic.nc"
     query_string = ""
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST_CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
@@ -63,12 +65,14 @@ def test_read_dataset(mock_read_config, tmpdir, caplog):
     tmpdir.remove()
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_get_quicklook_arome_arctic_no_reference_time(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_get_quicklook_arome_arctic_no_reference_time(mock_csw, mock_read_config, tmpdir, caplog):
     """Test for a none existing netcdf file"""
     netcdf_path = "tests/data/test_arome_arctic_without_forecast_time_20241111T06Z.nc"
     query_string = ""
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic_without_forecast_time_(\d{8}T\d{2})Z.nc)$',
                                       'base_netcdf_directory': '.',
                                       'module': 'mapgen.modules.arome_arctic_quicklook',
@@ -133,7 +137,8 @@ def test_read_dataset_base_path_missing_base(mock_read_config, tmpdir):
     tmpdir.remove()
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_read_dataset_request_getmap(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog):
     """Test reading the dataset"""
     netcdf_path = "tests/data/test_arome_arctic.nc"
     query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=air_temperature_2m&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
@@ -141,6 +146,7 @@ def test_read_dataset_request_getmap(mock_read_config, tmpdir, caplog):
                     "TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z")
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
@@ -171,7 +177,8 @@ def test_read_dataset_request_getmap(mock_read_config, tmpdir, caplog):
     tmpdir.remove()
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_read_dataset_request_getmap_contour_style(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_read_dataset_request_getmap_contour_style(mock_csw, mock_read_config, tmpdir, caplog):
     """Test reading the dataset"""
     netcdf_path = "tests/data/test_arome_arctic.nc"
     query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=air_temperature_2m&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
@@ -179,6 +186,7 @@ def test_read_dataset_request_getmap_contour_style(mock_read_config, tmpdir, cap
                     "TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z")
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
@@ -199,7 +207,8 @@ def test_read_dataset_request_getmap_contour_style(mock_read_config, tmpdir, cap
     assert "STYLES: contour" in caplog.text
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_read_dataset_request_getmap_vector_barbs(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_read_dataset_request_getmap_vector_barbs(mock_csw, mock_read_config, tmpdir, caplog):
     """Test reading the dataset"""
     netcdf_path = "tests/data/test_arome_arctic.nc"
     query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=wind_10m_vector&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
@@ -207,6 +216,7 @@ def test_read_dataset_request_getmap_vector_barbs(mock_read_config, tmpdir, capl
                     "FORMAT=image/png&TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z&DIM_SPACING=32&DIM_COLOUR=light-green")
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
@@ -225,7 +235,8 @@ def test_read_dataset_request_getmap_vector_barbs(mock_read_config, tmpdir, capl
     assert 'VECTOR wind_10m_vector x_wind_10m y_wind_10m' in caplog.text
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-def test_read_dataset_request_getmap_vector_vector(mock_read_config, tmpdir, caplog):
+@patch('mapgen.modules.helpers._find_summary_from_csw')
+def test_read_dataset_request_getmap_vector_vector(mock_csw, mock_read_config, tmpdir, caplog):
     """Test reading the dataset"""
     netcdf_path = "tests/data/test_arome_arctic.nc"
     query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=wind_10m_vector&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
@@ -233,6 +244,7 @@ def test_read_dataset_request_getmap_vector_vector(mock_read_config, tmpdir, cap
                     "FORMAT=image/png&TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z&DIM_SPACING=32&DIM_COLOUR=light-green")
     http_host = "localhost"
     url_scheme = "http"
+    mock_csw.return_value = "TEST CSW"
     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
