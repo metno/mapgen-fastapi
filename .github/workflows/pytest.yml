@@ -52,7 +52,8 @@ jobs:
         run: |
           pytest -v --cov=./ --cov-report=xml --timeout=60
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          file: ./coverage.xml
+          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
