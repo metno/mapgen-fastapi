@@ -23,4 +23,5 @@ dependencies:
     - pytest-timeout
     - pytest
     - pytest-cov
+    - WebTest
  
