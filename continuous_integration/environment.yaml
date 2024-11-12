@@ -14,6 +14,9 @@ dependencies:
   - gdal
   - cmocean
   - lxml
+  - cartopy
+  - metpy
+  - pandas
   - pip
   - pip:
     - pytest-lazy-fixtures
