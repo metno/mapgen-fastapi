@@ -42,15 +42,6 @@ jobs:
       - name: Update environment
         run: mamba env update -n test-environment -f continuous_integration/environment.yaml
         if: steps.cache.outputs.cache-hit != 'true'
-      - name: Run unit tests
-        shell: bash -l {0}
-        run: |
-          ls -al;
-          pwd;
-          python -v;
-          env;
-          which python;
-          which pytest;
       - name: Run Tests
         shell: bash -l {0}
         run: |
