@@ -11,7 +11,7 @@ dependencies:
   - rasterio
   - satpy
   - mapserver
-  - gdal
+  - libgdal
   - cmocean
   - lxml
   - cartopy
