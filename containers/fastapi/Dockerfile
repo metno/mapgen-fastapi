@@ -85,4 +85,4 @@ COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN mkdir -pv /usr/share/unit/welcome && chown -R $MAMBA_USER:$MAMBA_USER /usr/share/unit
 COPY --chown=$MAMBA_USER:$MAMBA_USER welcome.* /usr/share/unit/welcome/
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["unitd", "--no-daemon", "--control", "unix:/var/run/unit/control.unit.sock", "--statedir", "/var/lib/unit", "--pid", "/var/run/unit/unit.pid", "--log", "/proc/1/fd/1"]
+CMD unitd --no-daemon --control unix:/var/run/unit/control.unit.sock --statedir /var/lib/unit --pid /var/run/unit/unit.pid --log /proc/1/fd/1 | tee /var/log/unit.log
