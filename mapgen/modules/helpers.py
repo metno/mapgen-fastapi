@@ -343,8 +343,8 @@ def _find_projection(ds, variable, grid_mapping_cache):
             del optimal_bb_area
             optimal_bb_area = None
             logger.debug(f"GIRD MAPPING NAME: {grid_mapping_name}")
-        except KeyError:
-            logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
+        except KeyError as ke:
+            logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this. {ke}")
             return None
     return grid_mapping_name
 
