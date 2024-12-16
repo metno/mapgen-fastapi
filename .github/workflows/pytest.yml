@@ -1,10 +1,9 @@
 name: pytest
 
-on: [ push, pull_request ]
-  # push:
-  #   branches: [ main ]
-  # pull_request:
-  #   branches: [ main ]
+on:
+  push:
+  pull_request:
+    branches: [ main ]
 
 jobs:
   pyTestCov:
@@ -46,7 +45,7 @@ jobs:
       - name: Install mapgen
         shell: bash -l {0}
         run: |
-          python -m pip install --no-deps -e .;
+          python -m pip install --no-deps -e .
       - name: Run Tests
         shell: bash -l {0}
         run: |
