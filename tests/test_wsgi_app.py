@@ -568,19 +568,23 @@ class TestUploadGeotiffToCeph(unittest.TestCase):
     def test_exists_on_ceph_exception(self, mock_boto_resource):
         mock_s3 = MagicMock()
         mock_boto_resource.return_value = mock_s3
+        mock_s3.Object.side_effect = botocore.exceptions.ClientError({'Error': {'Code': '403'}}, 'HeadObject')
+
+        result = _exists_on_ceph(self.test_files[0], self.start_time)
+        
+        self.assertFalse(result)
+
         mock_s3.Object.side_effect = botocore.exceptions.ClientError({'Error': {'Code': '404'}}, 'HeadObject')
 
         result = _exists_on_ceph(self.test_files[0], self.start_time)
         
         self.assertFalse(result)
 
-    @patch('boto3.resource')
-    def test_exists_on_ceph_exception_other(self, mock_boto_resource):
-        mock_s3 = MagicMock()
-        mock_boto_resource.return_value = mock_s3
         mock_s3.Object.side_effect = botocore.exceptions.ClientError({'Error': {'Code': '401'}}, 'HeadObject')
 
-        self.assertRaises(botocore.exceptions.ClientError, _exists_on_ceph, self.test_files[0], self.start_time)
+        result = _exists_on_ceph(self.test_files[0], self.start_time)
+        
+        self.assertFalse(result)
 
     @patch('mapgen.modules.satellite_satpy_quicklook._exists_on_ceph')
     def test_generate_satpy_geotiff_already_exists(self, mock_exists_on_ceph):
