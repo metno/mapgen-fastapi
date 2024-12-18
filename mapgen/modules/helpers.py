@@ -855,9 +855,18 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         actual_variable = actual_x_variable
         logger.debug(f"VECTOR {vector_variable_name} {actual_x_variable} {actual_y_variable}")
 
-    grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
 
-    dimension_search = _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds)
+    try:
+        grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
+
+        dimension_search = _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds)
+    except KeyError as ke:
+        logger.error(f"status_code=500, Failed with: {str(ke)}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"Failed with: {str(ke)}.")
+    except Exception as ke:
+        logger.error(f"status_code=500, Failed with: {str(ke)}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"Failed with: {str(ke)}.")
+
     if grid_mapping_name == 'calculated_omerc':
         band_number = 1
     elif netcdf_file.endswith('ncml'):
