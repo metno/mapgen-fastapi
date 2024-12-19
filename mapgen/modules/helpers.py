@@ -413,10 +413,19 @@ def _get_time_diff(diff):
     return diff_string
 
 def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
+    resample = False
     if 'latitude' in ds and 'longitude' in ds:
+        resample = True
+        lat = 'latitude'
+        lon = 'longitude'
+    elif 'lat' in ds and 'lon' in ds:
+        resample = True
+        lat = 'lat'
+        lon = 'lon'
+    if resample:
         grid_mapping_name = "calculated_omerc"
         from pyresample import geometry
-        swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
+        swath_def = geometry.SwathDefinition(lons=ds[lon], lats=ds[lat])
         optimal = swath_def.compute_optimal_bb_area()
         grid_mapping_cache[grid_mapping_name] = optimal.proj_str
         return optimal, grid_mapping_name
