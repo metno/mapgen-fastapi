@@ -342,9 +342,9 @@ def _find_projection(ds, variable, grid_mapping_cache):
             optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
             del optimal_bb_area
             optimal_bb_area = None
-            logger.debug(f"GIRD MAPPING NAME: {grid_mapping_name}")
-        except KeyError as ke:
-            logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this. {ke}")
+            logger.debug(f"GRID MAPPING NAME: {grid_mapping_name}")
+        except (KeyError, ValueError):
+            logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
             return None
     return grid_mapping_name
 
@@ -425,9 +425,13 @@ def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
     if resample:
         grid_mapping_name = "calculated_omerc"
         from pyresample import geometry
-        swath_def = geometry.SwathDefinition(lons=ds[lon], lats=ds[lat])
-        optimal = swath_def.compute_optimal_bb_area()
-        grid_mapping_cache[grid_mapping_name] = optimal.proj_str
+        try:
+            swath_def = geometry.SwathDefinition(lons=ds[lon], lats=ds[lat])
+            optimal = swath_def.compute_optimal_bb_area()
+            grid_mapping_cache[grid_mapping_name] = optimal.proj_str
+        except ValueError as ve:
+            logger.exception(f"Failed to setup swath definition and or compute optimal bb area: {str(ve)}")
+            raise ValueError
         return optimal, grid_mapping_name
     raise KeyError
 
@@ -461,7 +465,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             ur_y = optimal_bb_area.area_extent[3]
             del optimal_bb_area
             optimal_bb_area = None
-        except KeyError:
+        except (KeyError, ValueError):
             return None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
@@ -577,7 +581,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
             ur_y = optimal_bb_area.area_extent[3]
             del optimal_bb_area
             optimal_bb_area = None
-        except KeyError:
+        except (KeyError, ValueError):
             return None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)

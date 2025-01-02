@@ -29,10 +29,10 @@ from satpy import Scene
 import mapscript
 from glob import glob
 from datetime import datetime
-from urllib.parse import parse_qs
+#from urllib.parse import parse_qs
 
 from mapgen.modules.helpers import handle_request
-from mapgen.modules.helpers import HTTPError
+from mapgen.modules.helpers import _parse_request, HTTPError
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)
@@ -71,7 +71,9 @@ def generate_satpy_quicklook(netcdf_path: str,
                              satpy_products: list = [],
                              product_config: dict = {}):
     
-    full_request = parse_qs(query_string)
+    full_request = _parse_request(query_string)
+
+    #full_request = parse_qs(query_string)
     logger.debug(f"Request query_params: {full_request}")
     logger.debug(f"Request url scheme: {url_scheme}")
     logger.debug(f"Request url netloc: {http_host}")
