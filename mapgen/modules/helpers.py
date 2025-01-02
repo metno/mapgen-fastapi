@@ -1465,12 +1465,18 @@ def _get_mapfiles_path(regexp_pattern_module):
         return "./"
 
 def _parse_request(query_string):
+    query_string = query_string.replace("&amp%3b", "&")
+    query_string = query_string.replace("&amp%3B", "&")
+    query_string = query_string.replace("&amp;", "&")
+    query_string = query_string.replace("%3D", "=")
+    query_string = query_string.replace("%3d", "=")
+    query_string = query_string.replace("%3F", "?")
+    query_string = query_string.replace("%3f", "?")
+    query_string = query_string.replace("?", "&")
     full_request = parse_qs(query_string)
 
     qp = {k.lower(): v for k, v in full_request.items()}
     logger.debug(f"QP: {qp}")
-    qp = {k.replace("amp;","") if k.startswith("amp;") else k:v for k,v in qp.items()}
-    logger.debug(f"QP after replace amp;: {qp}")
     qp = {k if (isinstance(v, list) and len(v) == 1) else k:v[0] for k,v in qp.items()}
     logger.debug(f"QP after flatten lists {qp}")
     return qp

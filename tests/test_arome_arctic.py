@@ -161,9 +161,6 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
     caplog.set_level(logging.DEBUG)
     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, products=[])
     assert response_code == '200 OK'
-    assert ("QP after replace amp;: {'service': ['WMS'], 'version': ['1.3.0'], 'request': ['GetMap'], 'layers': ['air_temperature_2m'], "
-            "'width': ['767'], 'height': ['880'], 'crs': ['EPSG:3857'], 'bbox': ['-4822584.097826986,7566329.44660393,10215292.880334288,24819695.471091438'], "
-            "'styles': ['raster'], 'format': ['image/png'], 'transparent': ['TRUE'], 'time': ['2024-11-11T07:00:00Z']}") in caplog.text
     assert ("QP after flatten lists {'service': 'WMS', 'version': '1.3.0', 'request': 'GetMap', 'layers': 'air_temperature_2m', "
             "'width': '767', 'height': '880', 'crs': 'EPSG:3857', 'bbox': '-4822584.097826986,7566329.44660393,10215292.880334288,24819695.471091438', "
             "'styles': 'raster', 'format': 'image/png', 'transparent': 'TRUE', 'time': '2024-11-11T07:00:00Z'}") in caplog.text
