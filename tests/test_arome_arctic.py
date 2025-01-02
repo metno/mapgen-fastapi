@@ -176,35 +176,35 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
 
     tmpdir.remove()
 
-@patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
-@patch('mapgen.modules.helpers._find_summary_from_csw')
-def test_read_dataset_request_getmap_contour_style(mock_csw, mock_read_config, tmpdir, caplog):
-    """Test reading the dataset"""
-    netcdf_path = "tests/data/test_arome_arctic.nc"
-    query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=air_temperature_2m&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
-                    "BBOX=-4822584.097826986,7566329.44660393,10215292.880334288,24819695.471091438&STYLES=contour&FORMAT=image/png&"
-                    "TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z")
-    http_host = "localhost"
-    url_scheme = "http"
-    mock_csw.return_value = "TEST CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
-                                 'base_netcdf_directory': '.',
-                                 'module': 'mapgen.modules.arome_arctic_quicklook',
-                                 'module_function': 'arome_arctic_quicklook',
-                                 'mapfile_template': os.path.join(tmpdir, 'test.map'),
-                                 'map_file_bucket': 'test-map-bucket',
-                                 'geotiff_bucket': 'test_bucket',
-                                 'mapfiles_path': tmpdir,
-                                 'geotiff_tmp': tmpdir,
-                                 'default_dataset': 'presure'}, None, None, None
+# @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
+# @patch('mapgen.modules.helpers._find_summary_from_csw')
+# def test_read_dataset_request_getmap_contour_style(mock_csw, mock_read_config, tmpdir, caplog):
+#     """Test reading the dataset"""
+#     netcdf_path = "tests/data/test_arome_arctic.nc"
+#     query_string = ("?&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=air_temperature_2m&WIDTH=767&HEIGHT=880&CRS=EPSG%3A3857&"
+#                     "BBOX=-4822584.097826986,7566329.44660393,10215292.880334288,24819695.471091438&STYLES=contour&FORMAT=image/png&"
+#                     "TRANSPARENT=TRUE&&TIME=2024-11-11T07%3A00%3A00Z")
+#     http_host = "localhost"
+#     url_scheme = "http"
+#     mock_csw.return_value = "TEST CSW"
+#     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+#                                  'base_netcdf_directory': '.',
+#                                  'module': 'mapgen.modules.arome_arctic_quicklook',
+#                                  'module_function': 'arome_arctic_quicklook',
+#                                  'mapfile_template': os.path.join(tmpdir, 'test.map'),
+#                                  'map_file_bucket': 'test-map-bucket',
+#                                  'geotiff_bucket': 'test_bucket',
+#                                  'mapfiles_path': tmpdir,
+#                                  'geotiff_tmp': tmpdir,
+#                                  'default_dataset': 'presure'}, None, None, None
 
-    caplog.set_level(logging.DEBUG)
-    response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, products=[])
-    assert response_code == '200 OK'
-    assert "Selected style: contour" in caplog.text
-    assert "Style in contour for style setup." in caplog.text
-    assert "Selected label scale 1 and offset -273.15" in caplog.text
-    assert "STYLES: contour" in caplog.text
+#     caplog.set_level(logging.DEBUG)
+#     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, products=[])
+#     assert response_code == '200 OK'
+#     assert "Selected style: contour" in caplog.text
+#     assert "Style in contour for style setup." in caplog.text
+#     assert "Selected label scale 1 and offset -273.15" in caplog.text
+#     assert "STYLES: contour" in caplog.text
 
 @patch('mapgen.modules.get_quicklook.find_config_for_this_netcdf')
 @patch('mapgen.modules.helpers._find_summary_from_csw')

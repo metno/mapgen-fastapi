@@ -82,7 +82,13 @@ def app(environ, start_response):
         try:
             netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
             query_string = environ['QUERY_STRING']
-            url_scheme = environ.get('HTTP_X_SCHEME', environ['wsgi.url_scheme'])
+            try:
+                url_scheme = environ.get('HTTP_X_FORWARDED_PROTO',
+                                        environ.get('HTTP_X_SCHEME', environ['wsgi.url_scheme']))
+            except Exception as ex:
+                logging.debug(f"Failed to detect url scheme with Exception: {ex}")
+                logging.warning(f"Failed to detect url scheme. Using http.")
+                url_scheme = 'http'
             http_host = environ['HTTP_HOST']
             p = Process(target=start_processing,
                         args=(netcdf_path,

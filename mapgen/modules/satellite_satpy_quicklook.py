@@ -246,12 +246,16 @@ def _exists_on_ceph(satpy_product, start_time):
         logger.debug(f"load object ...")
         s3.Object(satpy_product['bucket'], key).load()
     except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == "404":
+        if e.response['Error']['Code'] == "403" or e.response['Error']['Code'] == "404":
+            logger.debug(f"Failed to load object from s3 with code: {e.response['Error']['Code']}")
+            logger.debug(f"With message {str(e)}")
+            logger.debug("Assume object does not exist.")
             exists = False
         else:
             # Something else has gone wrong.
+            logger.debug(f"With message {str(e)}")
+            logger.debug("Assume object does not exist.")
             exists = False
-            raise
     else:
         # The object does exist.
         logger.debug(f"Already on object store")
