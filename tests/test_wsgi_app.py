@@ -9,7 +9,7 @@ import unittest
 from webtest import TestApp
 from mapgen.main import app
 from unittest.mock import patch, MagicMock
-from mapgen.modules.helpers import HTTPError
+from mapgen.modules.helpers import _parse_request, HTTPError
 from mapgen.modules.get_quicklook import get_quicklook
 from mapgen.modules.satellite_satpy_quicklook import _upload_geotiff_to_ceph, _exists_on_ceph, _generate_satpy_geotiff
 
@@ -93,6 +93,51 @@ def test_get_quicklook_test1(caplog):
     print(res.body)
     assert res.status == '500 Internal Server Error'
     assert res.body == b"File Not Found: /test1.nc."
+
+def test_parse_request():
+    req= "REQUEST=GetCapabilities&SERVICE=WMS&VERSION=1.3.0"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_lowercase():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_extra_questionmark():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0?service=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_with_ampersand():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0&amp;service=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_with_ampersand_html():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0&amp%3bservice=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_with_ampersand_html2():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0&amp%3Bservice=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_with_question_mark_html():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0%3Fservice=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_with_question_mark_html2():
+    req= "request=GetCapabilities&service=WMS&version=1.3.0%3fservice=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
+
+def test_parse_request_various():
+    req= "REQUEST=GetCapabilities&amp%3Brequest=GetCapabilities%3FSERVICE%3DWMS&amp%3Bversion=1.3.0&service=WMS"
+    result = _parse_request(req)
+    assert result == {'request': 'GetCapabilities', 'version': '1.3.0', 'service': 'WMS'}
 
 @patch('mapgen.modules.satellite_satpy_quicklook._generate_satpy_geotiff')
 @patch('mapgen.modules.satellite_satpy_quicklook.rasterio.open')
