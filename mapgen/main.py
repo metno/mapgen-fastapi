@@ -2,7 +2,7 @@
 main app
 ====================
 
-Copyright 2022,2024 MET Norway
+Copyright 2022,2024,2025 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -109,6 +109,10 @@ def app(environ, start_response):
             logging.debug(f"Failed to parse the query: {str(ke)}")
             response_code = '404 Not Found'
             response = b'Not Found\n'
+        except Exception as ex:
+            logging.debug(f"Failed to get quicklook with Exception: {ex}")
+            response_code = '500 Internal Server Error'
+            response = b'Internal Server Error\n'
         response_headers = [('Content-Type', content_type)]
     elif environ['REQUEST_METHOD'] == 'GET':
         """Need this to local images and robots.txt"""
@@ -251,6 +255,10 @@ class wmsServer(BaseHTTPRequestHandler):
                     logging.debug(f"Failed to parse the query: {str(ke)}")
                     response_code = '404'
                     response = b'Not Found\n'
+                except Exception as e:
+                    logging.debug(f"Failed to parse the query: {str(e)}")
+                    response_code = '500'
+                    response = b'Internal Server Error\n'
             else:
                 """Need this to local images and robots.txt"""
                 image_path = self.path
