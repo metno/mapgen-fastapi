@@ -2,7 +2,7 @@
 main app
 ====================
 
-Copyright 2022,2024 MET Norway
+Copyright 2022,2024,2025 MET Norway
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
