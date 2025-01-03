@@ -109,9 +109,8 @@ def handle_request(map_object, full_request):
     ows_req.type = mapscript.MS_GET_REQUEST
     full_request_string = str(full_request)
     try:
-        # Replace automatic inserted &amp; instead of plain &
-        full_request_string = full_request_string.replace("&amp;", "&")
-        full_request_string = full_request_string.replace("&amp%3B", "&")
+        # Do some cleanup to the query string
+        full_request_string = _query_string_cleanup(full_request_string)
         logger.debug(f"Full request string: {full_request_string}")
     except Exception as e:
         logger.error(f"status_code=500, failed to handle query parameters: {str(full_request)}, with error: {str(e)}")
@@ -1470,6 +1469,16 @@ def _get_mapfiles_path(regexp_pattern_module):
         return "./"
 
 def _parse_request(query_string):
+    query_string = _query_string_cleanup(query_string)
+    full_request = parse_qs(query_string)
+
+    qp = {k.lower(): v for k, v in full_request.items()}
+    logger.debug(f"QP: {qp}")
+    qp = {k if (isinstance(v, list) and len(v) == 1) else k:v[0] for k,v in qp.items()}
+    logger.debug(f"QP after flatten lists {qp}")
+    return qp
+
+def _query_string_cleanup(query_string):
     query_string = query_string.replace("&amp%3b", "&")
     query_string = query_string.replace("&amp%3B", "&")
     query_string = query_string.replace("&amp;", "&")
@@ -1478,10 +1487,4 @@ def _parse_request(query_string):
     query_string = query_string.replace("%3F", "?")
     query_string = query_string.replace("%3f", "?")
     query_string = query_string.replace("?", "&")
-    full_request = parse_qs(query_string)
-
-    qp = {k.lower(): v for k, v in full_request.items()}
-    logger.debug(f"QP: {qp}")
-    qp = {k if (isinstance(v, list) and len(v) == 1) else k:v[0] for k,v in qp.items()}
-    logger.debug(f"QP after flatten lists {qp}")
-    return qp
+    return query_string
