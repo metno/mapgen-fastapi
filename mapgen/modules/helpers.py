@@ -170,8 +170,13 @@ def handle_request(map_object, full_request):
         result = mapscript.msIO_getStdoutBufferBytes()
         mapscript.msIO_resetHandlers()
     else:
-        mapscript.msIO_installStdoutToBuffer()
-        dispatch_status = map_object.OWSDispatch(ows_req)
+        try:
+            mapscript.msIO_installStdoutToBuffer()
+            dispatch_status = map_object.OWSDispatch(ows_req)
+        except Exception as e:
+            logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
+            raise HTTPError(response_code='500 Internal Server Error',
+                            response=f"mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
         if dispatch_status != mapscript.MS_SUCCESS:
             logger.debug(f"DISPATCH status {dispatch_status}")
         content_type = mapscript.msIO_stripStdoutBufferContentType()
