@@ -59,16 +59,16 @@ def get_quicklook(netcdf_path: str,
                 response_code = '500'
                 response = (f"Failed to load function {product_config['module_function']} " 
                             f"from module {product_config['module']}. "
-                            "Check the server config.")
+                            "Check the server config.").encode()
                 content_type = 'text/plain'
             except OSError as oe:
                 logger.debug(f"Unable to access netcdf file {netcdf_path}: {str(oe)}")
                 response_code = '404 Not Found'
-                response = (f"Unable to access netcdf file {netcdf_path}.")
+                response = (f"Unable to access netcdf file {netcdf_path}.").encode()
                 content_type = 'text/plain'
             except Exception as e:
                 logger.debug(f"Unknown exception {str(e)}")
                 response_code = '500 Internal Server Error'
-                response = (f"Unknown server error. Please contact the server administrator.")
+                response = (f"Unknown server error. Please contact the server administrator.").encode()
                 content_type = 'text/plain'
     return response_code, response, content_type
