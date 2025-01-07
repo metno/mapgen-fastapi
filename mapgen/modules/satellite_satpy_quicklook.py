@@ -59,6 +59,8 @@ def _get_satpy_products(satpy_products, full_request, default_dataset):
                         ms_satpy_products = full_request['LAYER']
                     except KeyError:
                         pass
+    if not isinstance(ms_satpy_products, list):
+        ms_satpy_products = [ms_satpy_products]
     return ms_satpy_products
 
 def _get_mapfiles_path(regexp_pattern_module):
