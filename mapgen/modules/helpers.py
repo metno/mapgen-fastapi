@@ -288,6 +288,17 @@ def _find_summary_from_csw(search_fname, forecast_time, scheme, netloc):
         logger.debug("Not enough data to build CSW search_string for summary. Please add if applicable.")
     return summary_text
 
+def _size_x_y(xr_dataset):
+    x_l = ['x', 'X', 'Xc', 'longitude', 'lon']
+    y_l = ['y', 'Y', 'Yc', 'latitude', 'lat']
+    for x,y in zip(x_l, y_l):
+        try:
+            return xr_dataset.dims[x], xr_dataset.dims[y]
+        except KeyError:
+            pass
+    logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
+    return 2000, 2000
+
 def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title):
     """"Add all needed web metadata to the generated map file."""
     bn = os.path.basename(orig_netcdf_path)
@@ -303,19 +314,22 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
-    try:
-        map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
-    except KeyError:
-        try:
-            map_object.setSize(xr_dataset.dims['X'], xr_dataset.dims['Y'])
-        except KeyError:
-            try:
-                map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
-            except KeyError:
-                try:
-                    map_object.setSize(xr_dataset.dims['Xc'], xr_dataset.dims['Yc'])
-                except KeyError:
-                    map_object.setSize(2000, 2000)
+    _x, _y = _size_x_y(xr_dataset)
+    map_object.setSize(_x, _y)
+
+    # try:
+    #     map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
+    # except KeyError:
+    #     try:
+    #         map_object.setSize(xr_dataset.dims['X'], xr_dataset.dims['Y'])
+    #     except KeyError:
+    #         try:
+    #             map_object.setSize(xr_dataset.dims['longitude'], xr_dataset.dims['latitude'])
+    #         except KeyError:
+    #             try:
+    #                 map_object.setSize(xr_dataset.dims['Xc'], xr_dataset.dims['Yc'])
+    #             except KeyError:
+    #                 map_object.setSize(2000, 2000)
     map_object.units = mapscript.MS_DD
     try:
         map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
@@ -353,30 +367,70 @@ def _find_projection(ds, variable, grid_mapping_cache):
     return grid_mapping_name
 
 def _extract_extent(ds, variable):
-    try:
-        ll_x = min(ds[variable].coords['x'].data)
-        ur_x = max(ds[variable].coords['x'].data)
-        ll_y = min(ds[variable].coords['y'].data)
-        ur_y = max(ds[variable].coords['y'].data)
-    except KeyError:
+    """Extract extent of variable."""
+    x_l = ['x', 'X', 'Xc', 'longitude', 'lon']
+    y_l = ['y', 'Y', 'Yc', 'latitude', 'lat']
+    for x, y in zip(x_l, y_l):
         try:
-            ll_x = min(ds[variable].coords['X'].data)
-            ur_x = max(ds[variable].coords['X'].data)
-            ll_y = min(ds[variable].coords['Y'].data)
-            ur_y = max(ds[variable].coords['Y'].data)
-        except KeyError:
-            try:
-                ll_x = min(ds[variable].coords['Xc'].data)
-                ur_x = max(ds[variable].coords['Xc'].data)
-                ll_y = min(ds[variable].coords['Yc'].data)
-                ur_y = max(ds[variable].coords['Yc'].data)
-            except KeyError:
-                ll_x = min(ds[variable].coords['longitude'].data)
-                ur_x = max(ds[variable].coords['longitude'].data)
-                ll_y = min(ds[variable].coords['latitude'].data)
-                ur_y = max(ds[variable].coords['latitude'].data)
 
-    return ll_x,ur_x,ll_y,ur_y
+            ll_x = min(ds[variable].coords[x].data)
+            ur_x = max(ds[variable].coords[x].data)
+            ll_y = min(ds[variable].coords[y].data)
+            ur_y = max(ds[variable].coords[y].data)
+            print(ds[variable].coords[x])
+            return ll_x,ur_x,ll_y,ur_y
+        except KeyError:
+            pass
+    dim_names = _find_dim_names(ds, variable)
+    try:
+        ll_x = min(ds[variable].coords[dim_names[0]].data)
+        ur_x = max(ds[variable].coords[dim_names[0]].data)
+        ll_y = min(ds[variable].coords[dim_names[1]].data)
+        ur_y = max(ds[variable].coords[dim_names[1]].data)
+        return ll_x,ur_x,ll_y,ur_y
+    except KeyError:
+        pass
+    logger.debug(f"Failed to recognize extent of variable {variable}, valid is {x_l} and {y_l} or {dim_names}(found in dataset).")
+    raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize coords for {variable}. Valid for this service are {x_l} and {y_l} or {dim_names}(found in dataset).")
+
+def _find_dim_names(ds, variable):
+    logger.warning(f"Fail to detect from hardcode. Try to find dim names from variable")
+    dims = ds[variable].dims
+    dim_names = []
+    for dim in reversed(dims[1:]):
+        dim_names.append(dim)
+    return dim_names
+
+    # try:
+    #     ll_x = min(ds[variable].coords['x'].data)
+    #     ur_x = max(ds[variable].coords['x'].data)
+    #     ll_y = min(ds[variable].coords['y'].data)
+    #     ur_y = max(ds[variable].coords['y'].data)
+    # except KeyError:
+    #     try:
+    #         ll_x = min(ds[variable].coords['X'].data)
+    #         ur_x = max(ds[variable].coords['X'].data)
+    #         ll_y = min(ds[variable].coords['Y'].data)
+    #         ur_y = max(ds[variable].coords['Y'].data)
+    #     except KeyError:
+    #         try:
+    #             ll_x = min(ds[variable].coords['Xc'].data)
+    #             ur_x = max(ds[variable].coords['Xc'].data)
+    #             ll_y = min(ds[variable].coords['Yc'].data)
+    #             ur_y = max(ds[variable].coords['Yc'].data)
+    #         except KeyError:
+    #             try:
+    #                 ll_x = min(ds[variable].coords['longitude'].data)
+    #                 ur_x = max(ds[variable].coords['longitude'].data)
+    #                 ll_y = min(ds[variable].coords['latitude'].data)
+    #                 ur_y = max(ds[variable].coords['latitude'].data)
+    #             except KeyError as ke:
+    #                 ll_x = min(ds[variable].coords['lon'].data)
+    #                 ur_x = max(ds[variable].coords['lon'].data)
+    #                 ll_y = min(ds[variable].coords['lat'].data)
+    #                 ur_y = max(ds[variable].coords['lat'].data)
+
+    #return ll_x,ur_x,ll_y,ur_y
 
 def find_time_diff(ds, dim_name):
     prev = None
@@ -456,7 +510,7 @@ def _read_netcdfs_from_ncml(ncml_file):
         netcdf_paths.append(netcdf.get('location'))
     return netcdf_paths
 
-def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[]):
+def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for the netcdf file."""
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
@@ -473,7 +527,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
             return None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
-
+        logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
     layer.status = 1
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
@@ -503,7 +557,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         #     logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
@@ -571,7 +625,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
 
     return True
 
-def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[]):
+def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for vector fiels for the netcdf file."""
     logger.debug("ADDING vector")
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
@@ -618,7 +672,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         except Exception:
             logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         if dim_name in 'time':
             logger.debug("handle time")
@@ -697,7 +751,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude']:
+        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         for _dim_name in [dim_name, f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
@@ -727,15 +781,21 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
                             time_as_band += 1
                             time_stamp += diff
                     else:
-                        for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                            logger.debug(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
-                            if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
-                                logger.debug(f"{d} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
-                                break
-                            time_as_band += 1
-                        else:
+                        try:
+                            time_as_band = ds.indexes["time"].get_loc(requested_dimensions.strftime('%Y-%m-%d %H:%M:%S'))
+                            logger.debug(f"{time_as_band} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
+                        except KeyError as ke:
                             logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                             raise HTTPError(response_code='500 Internal Server Error', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                        # for d in ds['time'].dt.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                        #     logger.debug(f"Checking {time_as_band} {datetime.datetime.strptime(str(d.data), '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=datetime.timezone.utc).timestamp()} {d.data} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+                        #     if d == requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ'):
+                        #         logger.debug(f"{d} {requested_dimensions.strftime('%Y-%m-%dT%H:%M:%SZ')} {requested_dimensions.timestamp()}")
+                        #         break
+                        #     time_as_band += 1
+                        # else:
+                        #     logger.error(f"status_code=500, Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
+                        #     raise HTTPError(response_code='500 Internal Server Error', response=f"Could not find matching dimension {dim_name} {qp[_dim_name]} value for layer {variable}.")
                     _ds['selected_band_number'] = time_as_band
                     dimension_search.append(_ds)
                 else:
