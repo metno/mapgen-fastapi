@@ -446,7 +446,12 @@ def find_time_diff(ds, dim_name):
             stamp = datetime.datetime(y, m, d, h, minute, s)
             if prev:
                 diff = stamp - prev
-                if prev_diff and diff != prev_diff:
+                if prev_diff and diff >= datetime.timedelta(days=28) and diff <= datetime.timedelta(days=31) and prev + diff == stamp:
+                    logger.debug(f"Possible monthly range: {prev} {stamp}")
+                    diff = "P1M"
+                elif prev_diff and diff != prev_diff:
+                    logger.debug(f"DIFF {diff} PREV_DIFF {prev_diff}")
+                    logger.debug(f"Stamp {stamp} PREV {prev}")
                     # Diff between more than three stamps are different. Can not use range.
                     is_range = False
                     break
@@ -460,7 +465,9 @@ def find_time_diff(ds, dim_name):
     return diff,diff_string,is_range
 
 def _get_time_diff(diff):
-    if diff < datetime.timedelta(hours=1):
+    if diff == 'P1M':
+        diff_string = diff
+    elif diff < datetime.timedelta(hours=1):
         h = int(diff.seconds/60)
         diff_string = f"PT{h}M"
     elif diff < datetime.timedelta(hours=24):
