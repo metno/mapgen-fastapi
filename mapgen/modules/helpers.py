@@ -449,7 +449,6 @@ def find_time_diff(ds, dim_name):
         for y,m,d,h,minute,s in zip(ds[dim_name].dt.year.data, ds[dim_name].dt.month.data, ds[dim_name].dt.day.data, ds[dim_name].dt.hour.data, ds[dim_name].dt.minute.data, ds[dim_name].dt.second.data):
             stamp = datetime.datetime(y, m, d, h, minute, s)
             if prev:
-<<<<<<< Updated upstream
                 diff = stamp - prev
                 if prev_diff and diff >= datetime.timedelta(days=28) and diff <= datetime.timedelta(days=31) and prev + diff == stamp:
                     logger.debug(f"Possible monthly range: {prev} {stamp}")
@@ -461,25 +460,6 @@ def find_time_diff(ds, dim_name):
                     is_range = False
                     break
                 prev_diff = diff
-=======
-                from monthdelta import monthdelta
-                if prev + datetime.timedelta(months=1, ) == stamp:
-                    logger.debug(f"Possible monthly range: {prev} {stamp}")
-                    diff = "P1M"
-                else:
-                    diff = stamp - prev
-                    if prev_diff and diff != prev_diff:
-                        # if diff >= datetime.timedelta(days=28) and diff <= datetime.timedelta(days=31) and prev + diff == stamp:
-                        #     logger.debug(f"Possible monthly range: {prev} {stamp}")
-                        #     diff = "P1M"
-                        # elif diff != prev_diff:
-                        logger.debug(f"DIFF {diff} PREV_DIFF {prev_diff}")
-                        logger.debug(f"Stamp {stamp} PREV {prev}")
-                        # Diff between more than three stamps are different. Can not use range.
-                        is_range = False
-                        break
-                    prev_diff = diff
->>>>>>> Stashed changes
             prev = stamp
     if is_range:
         diff_string = _get_time_diff(diff)
@@ -489,13 +469,8 @@ def find_time_diff(ds, dim_name):
     return diff,diff_string,is_range
 
 def _get_time_diff(diff):
-<<<<<<< Updated upstream
     if diff == 'P1M':
         diff_string = diff
-=======
-    if diff == "P1M":
-        diff_string = "P1M"
->>>>>>> Stashed changes
     elif diff < datetime.timedelta(hours=1):
         h = int(diff.seconds/60)
         diff_string = f"PT{h}M"
@@ -548,9 +523,7 @@ def _read_netcdfs_from_ncml(ncml_file):
 
 def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for the netcdf file."""
-    print("HER")
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
-    print("HER2")
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
         try:
