@@ -311,11 +311,9 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
+    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
-    _x, _y = _size_x_y(xr_dataset)
-    map_object.setSize(_x, _y)
 
     # try:
     #     map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
@@ -332,15 +330,10 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
     #                 map_object.setSize(2000, 2000)
     map_object.units = mapscript.MS_DD
     try:
-        min_x = float(xr_dataset.attrs['geospatial_lon_min'])
-        min_y = float(xr_dataset.attrs['geospatial_lat_min'])
-        max_x = float(xr_dataset.attrs['geospatial_lon_max'])
-        max_y = float(xr_dataset.attrs['geospatial_lat_max'])
-        map_object.setExtent(min_x, min_y, max_x, max_y)
-        # map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
-        #                      float(xr_dataset.attrs['geospatial_lat_min']),
-        #                      float(xr_dataset.attrs['geospatial_lon_max']),
-        #                      float(xr_dataset.attrs['geospatial_lat_max'])))
+        map_object.setExtent(float(xr_dataset.attrs['geospatial_lon_min']),
+                             float(xr_dataset.attrs['geospatial_lat_min']),
+                             float(xr_dataset.attrs['geospatial_lon_max']),
+                             float(xr_dataset.attrs['geospatial_lat_max']))
     except KeyError:
         try:
             map_object.setExtent(float(np.nanmin(xr_dataset['longitude'].data)),
@@ -350,6 +343,11 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
         except KeyError:
             logger.debug("Could not detect extent of dataset. Force full Earth.")
             map_object.setExtent(-180, -90, 180, 90)
+
+    # Need to set size of map object after extent is set
+    _x, _y = _size_x_y(xr_dataset)
+    logger.debug(f"x and y dimensions in dataset {_x} {_y}")
+    map_object.setSize(_x, _y)
     return
 
 def _find_projection(ds, variable, grid_mapping_cache):
@@ -540,6 +538,10 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
         logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_KILOMETERS
+    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_METERS
     layer.status = 1
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
     layer.type = mapscript.MS_LAYER_RASTER
@@ -633,7 +635,6 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     style1.rangeitem = 'pixel'
     style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
-
     return True
 
 def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
@@ -979,6 +980,10 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
     set_scale_processing_key = False
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_KILOMETERS
+    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_METERS
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
 
@@ -1325,7 +1330,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             min_val = np.nanmin(ds[actual_variable][:,:].data)
             max_val = np.nanmax(ds[actual_variable][:,:].data)
         elif len(dimension_search) == 1:
-            logger.debug("Len 1")
+            logger.debug(f"Len 1 of {actual_variable}")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             if '_FillValue' in ds[actual_variable].attrs:

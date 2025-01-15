@@ -140,6 +140,7 @@ def generic_quicklook(netcdf_path: str,
  
     qp = _parse_request(query_string)
 
+    mapserver_map_file = None
     layer_no = 0
     map_object = None
     actual_variable = None
@@ -193,7 +194,7 @@ def generic_quicklook(netcdf_path: str,
         raise HTTPError(response_code='500 Internal Server Error', response=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
                                                      "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
 
-    map_object.save(os.path.join(_get_mapfiles_path(product_config), f'generic-{forecast_time:%Y%m%d%H%M%S}.map'))
+    map_object.save(mapserver_map_file)
 
     # Handle the request and return results.
     return handle_request(map_object, query_string)
