@@ -289,8 +289,8 @@ def _find_summary_from_csw(search_fname, forecast_time, scheme, netloc):
     return summary_text
 
 def _size_x_y(xr_dataset):
-    x_l = ['x', 'X', 'Xc', 'longitude', 'lon']
-    y_l = ['y', 'Y', 'Yc', 'latitude', 'lat']
+    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon']
+    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat']
     for x,y in zip(x_l, y_l):
         try:
             return xr_dataset.dims[x], xr_dataset.dims[y]
@@ -311,11 +311,9 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
+    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
-    _x, _y = _size_x_y(xr_dataset)
-    map_object.setSize(_x, _y)
 
     # try:
     #     map_object.setSize(xr_dataset.dims['x'], xr_dataset.dims['y'])
@@ -345,6 +343,11 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
         except KeyError:
             logger.debug("Could not detect extent of dataset. Force full Earth.")
             map_object.setExtent(-180, -90, 180, 90)
+
+    # Need to set size of map object after extent is set
+    _x, _y = _size_x_y(xr_dataset)
+    logger.debug(f"x and y dimensions in dataset {_x} {_y}")
+    map_object.setSize(_x, _y)
     return
 
 def _find_projection(ds, variable, grid_mapping_cache):
@@ -368,8 +371,8 @@ def _find_projection(ds, variable, grid_mapping_cache):
 
 def _extract_extent(ds, variable):
     """Extract extent of variable."""
-    x_l = ['x', 'X', 'Xc', 'longitude', 'lon']
-    y_l = ['y', 'Y', 'Yc', 'latitude', 'lat']
+    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon']
+    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat']
     for x, y in zip(x_l, y_l):
         try:
 
@@ -377,7 +380,6 @@ def _extract_extent(ds, variable):
             ur_x = max(ds[variable].coords[x].data)
             ll_y = min(ds[variable].coords[y].data)
             ur_y = max(ds[variable].coords[y].data)
-            print(ds[variable].coords[x])
             return ll_x,ur_x,ll_y,ur_y
         except KeyError:
             pass
@@ -536,6 +538,10 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
         logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_KILOMETERS
+    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_METERS
     layer.status = 1
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
     layer.type = mapscript.MS_LAYER_RASTER
@@ -564,7 +570,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         #     logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
@@ -629,7 +635,6 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     style1.rangeitem = 'pixel'
     style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
-
     return True
 
 def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
@@ -679,7 +684,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         except Exception:
             logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         if dim_name in 'time':
             logger.debug("handle time")
@@ -758,7 +763,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'y', 'Y', 'Yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
             continue
         for _dim_name in [dim_name, f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
@@ -975,6 +980,10 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
     set_scale_processing_key = False
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_KILOMETERS
+    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+        layer.units = mapscript.MS_METERS
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
 
@@ -1321,7 +1330,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             min_val = np.nanmin(ds[actual_variable][:,:].data)
             max_val = np.nanmax(ds[actual_variable][:,:].data)
         elif len(dimension_search) == 1:
-            logger.debug("Len 1")
+            logger.debug(f"Len 1 of {actual_variable}")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],:,:].data)
             if '_FillValue' in ds[actual_variable].attrs:

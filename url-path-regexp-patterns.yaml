@@ -110,6 +110,7 @@
     #'base_netcdf_directory': '/lustre/storeB/project/fou/hi/roms_hindcast/barents2500_2010/daily_average'
     'base_netcdf_directory': '/lustre/storeB'
     #'base_netcdf_directory': '/home/trygveas/testdata'
+    #'base_netcdf_directory': '/home/trygveas'
     'module': 'mapgen.modules.generic_quicklook'
     'module_function': 'generic_quicklook'
     'mapfiles_path': '/tmp'
