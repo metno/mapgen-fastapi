@@ -639,14 +639,15 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     return True
 
 def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
-    logger.debug(f"adjust extent to units VARIBLE: {variable}")
     dim_name = _find_dim_names(ds, variable)
     try:
         if "units=m" in grid_mapping_cache[grid_mapping_name]:
             if ds[variable].coords[dim_name[0]].attrs['units'] == 'km':
+                logger.debug(f"adjust extent to units VARIBLE: {variable} {dim_name[0]} from km to m")
                 ll_x *= 1000
                 ur_x *= 1000
             if ds[variable].coords[dim_name[1]].attrs['units'] == 'km':
+                logger.debug(f"adjust extent to units VARIBLE: {variable} {dim_name[1]} from km to m")
                 ll_y *= 1000
                 ur_y *= 1000
     except (KeyError, AttributeError, IndexError):
