@@ -383,6 +383,7 @@ def _extract_extent(ds, variable):
             return ll_x,ur_x,ll_y,ur_y
         except KeyError:
             pass
+    logger.warning(f"Fail to detect dimmension names from hardcoded values. Try to find dim names from variable")
     dim_names = _find_dim_names(ds, variable)
     try:
         ll_x = min(ds[variable].coords[dim_names[0]].data)
@@ -396,7 +397,6 @@ def _extract_extent(ds, variable):
     raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize coords for {variable}. Valid for this service are {x_l} and {y_l} or {dim_names}(found in dataset).")
 
 def _find_dim_names(ds, variable):
-    logger.warning(f"Fail to detect from hardcode. Try to find dim names from variable")
     dims = ds[variable].dims
     dim_names = []
     for dim in reversed(dims[1:]):
@@ -557,6 +557,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     logger.debug(f"wms_title {wms_title}")
     layer.metadata.set("wms_title", f"{wms_title}")
 
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     if 'time' not in ds[variable].dims:
@@ -637,6 +638,23 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
     return True
 
+def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
+    dim_name = _find_dim_names(ds, variable)
+    try:
+        if "units=m" in grid_mapping_cache[grid_mapping_name]:
+            if ds[variable].coords[dim_name[0]].attrs['units'] == 'km':
+                logger.debug(f"adjust extent to units VARIBLE: {variable} {dim_name[0]} from km to m")
+                ll_x *= 1000
+                ur_x *= 1000
+            if ds[variable].coords[dim_name[1]].attrs['units'] == 'km':
+                logger.debug(f"adjust extent to units VARIBLE: {variable} {dim_name[1]} from km to m")
+                ll_y *= 1000
+                ur_y *= 1000
+    except (KeyError, AttributeError, IndexError):
+        logger.warning(f"Could not find units for variable {variable} dimension {dim_name}")
+        pass
+    return ll_x, ll_y, ur_x, ur_y
+
 def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for vector fiels for the netcdf file."""
     logger.debug("ADDING vector")
@@ -675,6 +693,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         layer.name = f'{vector_variable_name}_vector_from_direction_and_speed'
         layer.metadata.set("wms_title", f'{vector_variable_name} vector from direction and speed')
     layer.setConnectionType(mapscript.MS_CONTOUR, "")
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     if 'time' not in ds[variable].dims:
@@ -980,6 +999,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
     set_scale_processing_key = False
     layer.setProjection(grid_mapping_cache[grid_mapping_name])
+
     if "units=km" in grid_mapping_cache[grid_mapping_name]:
         layer.units = mapscript.MS_KILOMETERS
     elif "units=m" in grid_mapping_cache[grid_mapping_name]:
@@ -1263,6 +1283,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         optimal_bb_area = None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, actual_variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     logger.debug(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
 
