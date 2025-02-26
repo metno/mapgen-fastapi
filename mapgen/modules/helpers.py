@@ -1459,6 +1459,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key):
     import importlib
     return_val = False
+    colormap_dict = {}
     try:
         logger.debug(f"module to load {ds[actual_variable].colormap.split('.')[0]}")
         loaded_module = importlib.import_module(ds[actual_variable].colormap.split(".")[0])
@@ -1471,13 +1472,24 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
         return return_val, min_val, max_val
     except AttributeError as ae:
         logger.debug(f"Attribute not found: {str(ae)}")
-        return return_val, min_val, max_val
+        pass
     except Exception:
         raise
     try:
         minmax = ds[actual_variable].minmax.split(' ')
-        min_val = float(minmax[0])
-        max_val = float(minmax[1])
+        try:
+            logger.debug(f"add_offset {ds[actual_variable].add_offset}")
+            min_val = float(minmax[0]) - ds[actual_variable].add_offset
+            max_val = float(minmax[1]) - ds[actual_variable].add_offset
+        except Exception:
+            pass
+        try:
+            logger.debug(f"scale_factor {ds[actual_variable].scale_factor}")
+            min_val = min_val/ds[actual_variable].scale_factor
+            max_val = max_val/ds[actual_variable].scale_factor
+        except Exception:
+            pass
+
         logger.debug(f"Using from minmax min max {min_val} {max_val}")
         if set_scale_processing_key:
             logger.debug("Setting mapserver processing scale and buckets")
@@ -1493,26 +1505,27 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
     except AttributeError as ae:
         logger.debug(f"Attribute not found: {str(ae)}. No units.")
         units = ""
-    try:
-        vals = np.linspace(min_val, max_val, num=33)
-        prev_val = vals[0]
-        index = 0
-        for val in vals[1:]:
-            s = mapscript.classObj(layer)
-            s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {units}"
-            s.group = 'raster'
-            s.setExpression(f'([pixel]>={prev_val:0.1f} and [pixel]<{val:0.1f})')
-            _style = mapscript.styleObj(s)
-            _style.color = mapscript.colorObj(red=int(colormap_dict['red'][index][1]*256),
-                                              green=int(colormap_dict['green'][index][1]*256),
-                                              blue=int(colormap_dict['blue'][index][1]*256))
-            prev_val = val
-            index += 1
-        return_val = True
-    except AttributeError as ae:
-        logger.debug(f"Attribute not found: {str(ae)}")
-    except Exception:
-        raise
+    if colormap_dict:
+        try:
+            vals = np.linspace(min_val, max_val, num=33)
+            prev_val = vals[0]
+            index = 0
+            for val in vals[1:]:
+                s = mapscript.classObj(layer)
+                s.name = f"{ds[actual_variable].colormap} [{prev_val:0.1f}, {val:0.1f}> {units}"
+                s.group = 'raster'
+                s.setExpression(f'([pixel]>={prev_val:0.1f} and [pixel]<{val:0.1f})')
+                _style = mapscript.styleObj(s)
+                _style.color = mapscript.colorObj(red=int(colormap_dict['red'][index][1]*256),
+                                                green=int(colormap_dict['green'][index][1]*256),
+                                                blue=int(colormap_dict['blue'][index][1]*256))
+                prev_val = val
+                index += 1
+            return_val = True
+        except AttributeError as ae:
+            logger.debug(f"Attribute not found: {str(ae)}")
+        except Exception:
+            raise
 
     return return_val, min_val, max_val
 
