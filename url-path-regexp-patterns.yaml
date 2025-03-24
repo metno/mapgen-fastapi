@@ -105,17 +105,6 @@
     'module': 'mapgen.modules.generic_quicklook'
     'module_function': 'generic_quicklook'
     'mapfiles_path': '/tmp'
-  - 'pattern': '^(.*ensemble-mean_ssp370_both-bc-sn2018v2005_rawbc_norway_1km_diff-tas.nc$)'
-    'base_netcdf_directory': '/home/trygveas/Git/mapgen-fastapi'
-    'module': 'mapgen.modules.generic_quicklook'
-    'module_function': 'generic_quicklook'
-    'mapfiles_path': '/tmp'
-    styles:
-      - name: 'Temperature'
-        min: 0
-        max: 10
-        colors: ["#dd5f4d", "#b2182a", "#67001f", "#420114"]
-        intervals: [0, 3, 4, 5, 10]
   - 'pattern': '^(.*.nc$)'
     #'base_netcdf_directory': '/lustre/storeB/project/fou/fd/project/sar-doppler/products/sar_doppler/merged'
     #'base_netcdf_directory': '/lustre/storeB/project/fou/hi/roms_hindcast/barents2500_2010/daily_average'

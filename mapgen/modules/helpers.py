@@ -64,14 +64,12 @@ def _read_config_file(regexp_config_file):
         pass
     return regexp_config
 
-def find_config_for_this_netcdf(netcdf_path):
-    default_regexp_config_filename = 'url-path-regexp-patterns.yaml'
-    default_regexp_config_dir = '/config'
-    if os.path.exists(os.path.join('./', default_regexp_config_filename)):
-        regexp_config_file = os.path.join('./', default_regexp_config_filename)
+def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
+    if os.path.exists(os.path.join('./', regexp_config_filename)):
+        regexp_config_file = os.path.join('./', regexp_config_filename)
     else:
-        regexp_config_file = os.path.join(default_regexp_config_dir,
-                                          default_regexp_config_filename)
+        regexp_config_file = os.path.join(regexp_config_dir,
+                                          regexp_config_filename)
     regexp_config = _read_config_file(regexp_config_file)
     regexp_pattern_module = None
     content_type = 'text/plain'
