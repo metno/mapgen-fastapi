@@ -163,13 +163,20 @@ def generic_quicklook(netcdf_path: str,
             map_object = mapscript.mapObj()
             _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS")
             map_object.setSymbolSet(symbol_file)
+            map_object.scalebar.status = mapscript.MS_EMBED
+            map_object.scalebar.position = mapscript.MS_LR
+            map_object.scalebar.units = mapscript.MS_KILOMETERS
+            map_object.scalebar.intervals = 1
+            map_object.scalebar.outlinecolor.setRGB(0, 0, 0)
+            map_object.scalebar.height = 1
+
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
             netcdf_files = []
             if netcdf_path.endswith('ncml'):
                 netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
             for variable in variables:
-                if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds']:
+                if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'projection_utm', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds']:
                     logger.debug(f"Skipping variable or dimension: {variable}")
                     continue
                 layer = mapscript.layerObj()
