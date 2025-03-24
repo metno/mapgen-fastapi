@@ -115,12 +115,12 @@ def arome_arctic_quicklook(netcdf_path: str,
                     logger.debug(f"Skipping variable or dimension: {variable}")
                     continue
                 layer = mapscript.layerObj()
-                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, product_config=product_config):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                     logger.debug(f"Add wind vector layer for {variable}.")
                     layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path):
+                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, product_config=product_config):
                         layer_no = map_object.insertLayer(layer_contour)
 
     map_object.save(mapserver_map_file)
