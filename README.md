@@ -122,4 +122,6 @@ styles:
 5 <= data value <= 10    gets color #420114
 ```
 
-A legend will look like this:
+A legend will look like this, where the text is the unit of the variable viewed:
+
+![alt text](legend_test.png)
