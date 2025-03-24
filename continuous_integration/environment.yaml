@@ -10,7 +10,7 @@ dependencies:
   - boto3
   - rasterio
   - satpy
-  - mapserver
+  - mapserver==8.2.2
   - gdal
   - libgdal
   - cmocean
