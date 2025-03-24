@@ -64,14 +64,12 @@ def _read_config_file(regexp_config_file):
         pass
     return regexp_config
 
-def find_config_for_this_netcdf(netcdf_path):
-    default_regexp_config_filename = 'url-path-regexp-patterns.yaml'
-    default_regexp_config_dir = '/config'
-    if os.path.exists(os.path.join('./', default_regexp_config_filename)):
-        regexp_config_file = os.path.join('./', default_regexp_config_filename)
+def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
+    if os.path.exists(os.path.join('./', regexp_config_filename)):
+        regexp_config_file = os.path.join('./', regexp_config_filename)
     else:
-        regexp_config_file = os.path.join(default_regexp_config_dir,
-                                          default_regexp_config_filename)
+        regexp_config_file = os.path.join(regexp_config_dir,
+                                          regexp_config_filename)
     regexp_config = _read_config_file(regexp_config_file)
     regexp_pattern_module = None
     content_type = 'text/plain'
@@ -299,7 +297,7 @@ def _size_x_y(xr_dataset):
     logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
     return 2000, 2000
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title):
+def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title, api):
     """"Add all needed web metadata to the generated map file."""
     bn = os.path.basename(orig_netcdf_path)
     if bn not in summary_cache:
@@ -310,9 +308,11 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
         else:
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
-    map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
+    map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/{api}{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
     map_object.web.metadata.set("wms_enable_request", "*")
+    map_object.web.metadata.set("wms_feature_info_mime_type", "text/html")
+
     map_object.setProjection("AUTO")
 
     # try:
@@ -519,6 +519,15 @@ def _read_netcdfs_from_ncml(ncml_file):
         netcdf_paths.append(netcdf.get('location'))
     return netcdf_paths
 
+def _hex_to_rgb(value: str):
+    """
+    Takes a string hex value eg. "#002147" and returns a tuple rgb (0, 33, 71)
+    Usage:
+        rgb_tuple = hex_to_rgb("#002147")
+    """
+    value = value.lstrip("#")
+    return tuple(bytes.fromhex(value))
+
 def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for the netcdf file."""
     grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
@@ -621,21 +630,47 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     if dims_list:
         layer.metadata.set(f"wms_dimensionlist", ','.join(dims_list))
 
-    s = mapscript.classObj(layer)
-    s.name = "contour"
-    s.group = "contour"
-    style = mapscript.styleObj(s)
-    style.rangeitem = 'pixel'
-    style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
-    style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+    if product_config.get('styles'):
+        try:
+            layer.classgroup = product_config['styles'][0]['name']
+            for style_config in product_config['styles']:
+                prev_color_interval = style_config['intervals'][0]
+                for color_interval, color in zip(style_config['intervals'][1:], style_config['colors']):
+                    s = mapscript.classObj(layer)
+                    s.name = style_config['name']
+                    s.group = style_config['name']
+                    if color_interval == style_config['intervals'][-1]:
+                        #Is last interval, need to include the end point/max val
+                        s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
+                    else:
+                        s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
 
-    s1 = mapscript.classObj(layer)
-    s1.name = "Linear grayscale using min and max not nan from data"
-    s1.group = 'raster'
-    style1 = mapscript.styleObj(s1)
-    style1.rangeitem = 'pixel'
-    style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
-    style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+                    _style = mapscript.styleObj(s)
+                    rgb = _hex_to_rgb(color)
+                    _style.color = mapscript.colorObj(*rgb)
+                    prev_color_interval = color_interval
+        except Exception as ex:
+            logger.exception(f"Problems in setting styles: {ex}")
+    else:
+        s = mapscript.classObj(layer)
+        s.name = "contour"
+        s.group = "contour"
+        style = mapscript.styleObj(s)
+        style.rangeitem = 'pixel'
+        style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+        style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+
+        s1 = mapscript.classObj(layer)
+        s1.name = "Linear grayscale using min and max not nan from data"
+        s1.group = 'raster'
+        style1 = mapscript.styleObj(s1)
+        style1.rangeitem = 'pixel'
+        style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+        style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+
+    layer.template = "/tmp/templatename"
+
+
     return True
 
 def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
@@ -944,8 +979,19 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         logger.debug("Empty style. Force wind barbs.")
         style = "Wind_barbs"
     elif style == "":
-        logger.debug("Empty style. Force raster.")
-        style = 'raster'
+        if product_config.get('styles'):
+            try:
+                logger.debug(f"Selects the first as default as none is given: {product_config['styles'][0]['name']}")
+                style = product_config['styles'][0]['name'].lower()
+            except (KeyError, IndexError) as err:
+                logging.exception(f"Styles not properly defined in product config: {product_config} with {err}")
+                raise HTTPError(response_code='500 Internal Server Error', response=f"Something wrong with the styles config.")
+            except Exception as err:
+                logging.exception(f"Styles not properly defined in product config: {product_config} with {err}")
+                raise HTTPError(response_code='500 Internal Server Error', response=f"Something wrong with the styles config.")
+        else:
+            logger.debug("Empty style. Force raster.")
+            style = 'raster'
     logger.debug(f"Selected style: {style}")
     actual_variable = variable
     #if style in 'contour': #variable.endswith('_contour'):
@@ -1400,8 +1446,40 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         except UnboundLocalError as le:
             logger.error(f"status_code=500, Failed with: {str(le)}.")
             raise HTTPError(response_code='500 Internal Server Error', response=f"Unspecified internal server error.")
-        #Grayscale
-        if style in 'contour': #variable.endswith('_contour'):
+        if product_config.get('styles'):
+            # Use style info from config:
+            try:
+                for style_config in product_config['styles']:
+                    if style_config['name'].lower() == style.lower():
+                        prev_color_interval = style_config['intervals'][0]
+                        layer.classgroup = style_config['name']
+                        for color_interval, color in zip(style_config['intervals'][1:], style_config['colors']):
+                            s = mapscript.classObj(layer)
+                            s.group = style_config['name']
+                            if color_interval == style_config['intervals'][-1]:
+                                #Is last interval, need to include the end point/max val
+                                s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
+                                s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} <= {color_interval:0.1f}"
+                            else:
+                                s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
+                                s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} < {color_interval:0.1f}"
+
+                            _style = mapscript.styleObj(s)
+                            rgb = _hex_to_rgb(color)
+                            _style.color = mapscript.colorObj(*rgb)
+                            prev_color_interval = color_interval
+                        logger.debug(f"Alse need to replace min and max:")
+                        logger.debug(f"Min: {min_val} Max: {max_val}")
+                        min_val = style_config['intervals'][0]
+                        max_val = style_config['intervals'][-1]
+                        logger.debug(f"Min: {min_val} Max: {max_val}")
+                        break
+                else:
+                    logger.error(f"No styles defined for style {style}. This is not expected when styles is defined in config.")
+            except Exception as ex:
+                logger.exception(f"Unexpected problems setting styles: {ex}")
+
+        elif style in 'contour': #variable.endswith('_contour'):
             logger.debug("Style in contour for style setup.")
             layer.labelitem = 'contour'
             s = mapscript.classObj(layer)
@@ -1441,6 +1519,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             s.addLabel(label)
         elif style == 'raster':
             cfa, min_val, max_val = _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_scale_processing_key)
+            #Grayscale
             if not cfa:
                 # Use standard linear grayscale
                 s = mapscript.classObj(layer)
@@ -1453,6 +1532,17 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                 _style.minvalue = float(min_val)
                 _style.maxvalue = float(max_val)
             logger.debug(f"After colormap min max {min_val} {max_val}")
+
+    # Generate GetFeatureInfo template
+    get_feature_info_filename = f'/tmp/getfeature-info-{actual_variable}.html'
+    if not os.path.exists(get_feature_info_filename):
+        with open(get_feature_info_filename, 'w') as gfi:
+            gfi.write("<!-- MapServer Template -->\n")
+            gfi.write("Longitude [x]<br>\n")
+            gfi.write("Latitude  [y]<br>\n")
+            gfi.write(f"Pixel value [value_list] {ds[actual_variable].attrs['units']}<br>\n")
+    if os.path.exists(get_feature_info_filename):
+        layer.template = get_feature_info_filename
 
     return actual_variable
 
@@ -1580,8 +1670,7 @@ def _get_mapfiles_path(regexp_pattern_module):
 
 def _parse_request(query_string):
     query_string = _query_string_cleanup(query_string)
-    full_request = parse_qs(query_string)
-
+    full_request = parse_qs(query_string, keep_blank_values=True)
     qp = {k.lower(): v for k, v in full_request.items()}
     logger.debug(f"QP: {qp}")
     qp = {k if (isinstance(v, list) and len(v) == 1) else k:v[0] for k,v in qp.items()}

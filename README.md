@@ -72,3 +72,56 @@ An example is the existing module `satellite_satpy_quicklook.py`. Here satellite
 
 ### Add gridded data
 Please have a look at `gridded_data_quicklook_template.py`. Here you would need to implement your own handler and add configuration accordingly.
+
+## Config format
+
+The config is a yaml file with a list of entries. Valid elements are:
+```yaml
+---
+- pattern: regexp pattern for the input file. Uses the python re module. see eg https://docs.python.org/3/library/re.html how this can be done. Mandatory.
+  module: which module to handle the request. Mandatory.
+  module_function: which function in the module to handle the request. Mandatory
+  base_netcdf_directory: basename to be added to the request path. Mandatory.
+  mapfiles_path: where internal cached map (internal to mapserver) files are stored. Must be writable. Not Mandatory, defaults to ./ relative to the server home.
+  styles: List of styles to add to all layers/variables for this dataset in the request. Not mandatory, if not given greyscale raster and blue contour is added
+    - name: Name of the style. Used in the request and in the legend. Case sensitive.
+      colors: list of hex color codes
+      intervals: Interval of data values to be given the color in colors. First and last value are used as min max.
+  geotiff_tmp: Where to store generated geotiffs. Only used in special satpy netcdf swath satellite data handling. Directory must be writable. Not mandatory.
+  geotiff_bucket: Bucket to store generate geotiff. Only used in special satpy netcdf swath satellite data handling for cache. Not mandatory.
+  default_dataset: Default dataset to generate as geotiff. Only used in special satpy netcdf swath satellite data handling for cache. Not mandatory.
+  mapfile_template: Mapserver map file template to use. Deprecated.
+  map_file_bucket: Bucket to store cached map files. Deprecated.
+```
+
+### Valid modules and module functions:
+Normally to first should be used
+- module: mapgen.modules.generic_quicklook
+  - module_function: generic_quicklook
+- module: mapgen.modules.arome_arctic_quicklook
+  - module_function: arome_arctic_quicklook
+- module: mapgen.modules.satellite_satpy_quicklook
+  - module_function: satellite_satpy_quicklook
+
+
+### Details on style:
+The style.intervals uses greater or equal to (>=) and less than (<) for the intervals until the last where this is included using less than or equal to (<=)
+
+eg. a style like this:
+```yaml
+styles:
+  - name: 'Temperature'
+    colors: ["#dd5f4d", "#b2182a", "#67001f", "#420114"]
+    intervals: [0, 3, 4, 5, 10]
+```
+
+```
+0 <= data value < 3      gets color #dd5f4d
+3 <= data value < 4      gets color #b2182a
+4 <= data value < 5      gets color #67001f
+5 <= data value <= 10    gets color #420114
+```
+
+A legend will look like this, where the text is the unit of the variable viewed:
+
+![alt text](legend_test.png)

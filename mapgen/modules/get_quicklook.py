@@ -32,9 +32,11 @@ def get_quicklook(netcdf_path: str,
                   query_string,
                   http_host,
                   url_scheme,
-                  products=[]):
+                  products=[],
+                  api='api/get_quicklook'):
     logger.debug(f"Request query_params: {query_string}")
     logger.debug(f"Request url scheme: {url_scheme} and host {http_host}")
+    logger.debug(f"Selected api {api}")
     netcdf_path = netcdf_path.replace("//", "/")
     logger.debug(f'{netcdf_path}')
     if not netcdf_path:
@@ -43,13 +45,17 @@ def get_quicklook(netcdf_path: str,
         content_type = 'text/plain'
     else:        
         logger.debug(f"{products}")
-        product_config, response, response_code, content_type = find_config_for_this_netcdf(netcdf_path)
+        if api == 'klimakverna':
+            product_config, response, response_code, content_type = find_config_for_this_netcdf(netcdf_path,
+                                                                                                regexp_config_filename='klimakverna-url-path-regexp-patterns.yaml')
+        else:
+            product_config, response, response_code, content_type = find_config_for_this_netcdf(netcdf_path)
         if product_config:
             # Load module from config
             try:
                 loaded_module = getattr(sys.modules[product_config['module']], product_config['module_function'])
                 # Call module
-                response_code, response, content_type = loaded_module(netcdf_path, query_string, http_host, url_scheme, products, product_config)
+                response_code, response, content_type = loaded_module(netcdf_path, query_string, http_host, url_scheme, products, product_config, api)
             except HTTPError as he:
                 response_code = he.response_code
                 response = he.response

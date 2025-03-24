@@ -58,10 +58,10 @@ logging_cfg = {
     }
 }
 
-def start_processing(netcdf_path, query_string, netloc, scheme, q):
+def start_processing(api, netcdf_path, query_string, netloc, scheme, q):
     try:
         start = time.time()
-        response_code, response, content_type = get_quicklook(netcdf_path, query_string, netloc, scheme, products=None)
+        response_code, response, content_type = get_quicklook(netcdf_path, query_string, netloc, scheme, products=None, api=api)
         end = time.time()
         logging.debug(f"qet_quicklook completed in: {end - start:f}seconds")
         start = end
@@ -78,9 +78,14 @@ def app(environ, start_response):
     for k in environ:
         logging.debug(f"{k}: {environ[k]}")
     q = Queue()
-    if environ['PATH_INFO'].startswith('/api/get_quicklook') and environ['REQUEST_METHOD'] == 'GET':
+    if (environ['PATH_INFO'].startswith('/api/get_quicklook') or
+        environ['PATH_INFO'].startswith('/klimakverna') ) and environ['REQUEST_METHOD'] == 'GET':
         try:
+            api = 'api/get_quicklook'
+            if 'klimakverna' in environ['PATH_INFO']:
+                api = 'klimakverna'
             netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
+            netcdf_path = netcdf_path.replace('/klimakverna','')
             query_string = environ['QUERY_STRING']
             try:
                 url_scheme = environ.get('HTTP_X_FORWARDED_PROTO',
@@ -91,7 +96,8 @@ def app(environ, start_response):
                 url_scheme = 'http'
             http_host = environ['HTTP_HOST']
             p = Process(target=start_processing,
-                        args=(netcdf_path,
+                        args=(api,
+                              netcdf_path,
                               query_string,
                               http_host,
                               url_scheme,
@@ -110,7 +116,7 @@ def app(environ, start_response):
             response_code = '404 Not Found'
             response = b'Not Found\n'
         except Exception as ex:
-            logging.debug(f"Failed to get quicklook with Exception: {ex}")
+            logging.exception(f"Failed to get quicklook with Exception: {ex}")
             response_code = '500 Internal Server Error'
             response = b'Internal Server Error\n'
         response_headers = [('Content-Type', content_type)]
