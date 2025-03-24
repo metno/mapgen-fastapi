@@ -81,7 +81,7 @@ The config is a yaml file with a list of entries. Valid elements are:
 - pattern: regexp pattern for the input file. Uses the python re module. see eg https://docs.python.org/3/library/re.html how this can be done. Mandatory.
   module: which module to handle the request. Mandatory.
   module_function: which function in the module to handle the request. Mandatory
-  base_netcdf_directory: basename to be added to the request path. Not Mandatory, recommended due to security.
+  base_netcdf_directory: basename to be added to the request path. Mandatory.
   mapfiles_path: where internal cached map (internal to mapserver) files are stored. Must be writable. Not Mandatory, defaults to ./ relative to the server home.
   styles: List of styles to add to all layers/variables for this dataset in the request. Not mandatory, if not given greyscale raster and blue contour is added
     - name: Name of the style. Used in the request and in the legend. Case sensitive.
