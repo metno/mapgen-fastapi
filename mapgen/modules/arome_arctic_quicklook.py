@@ -56,7 +56,8 @@ def arome_arctic_quicklook(netcdf_path: str,
                            http_host: str,
                            url_scheme: str,
                            satpy_products: list = [],
-                           product_config: dict = {}):
+                           product_config: dict = {},
+                           api = None):
     netcdf_path = netcdf_path.replace("//", "/")
     orig_netcdf_path = netcdf_path
     try:
@@ -92,7 +93,7 @@ def arome_arctic_quicklook(netcdf_path: str,
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic.")
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic.", api)
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
         actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
@@ -106,7 +107,7 @@ def arome_arctic_quicklook(netcdf_path: str,
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
-            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic")
+            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic", api)
             map_object.setSymbolSet(symbol_file)
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())

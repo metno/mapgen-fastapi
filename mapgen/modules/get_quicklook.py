@@ -33,7 +33,7 @@ def get_quicklook(netcdf_path: str,
                   http_host,
                   url_scheme,
                   products=[],
-                  api=None):
+                  api='api/get_quicklook'):
     logger.debug(f"Request query_params: {query_string}")
     logger.debug(f"Request url scheme: {url_scheme} and host {http_host}")
     logger.debug(f"Selected api {api}")
@@ -55,7 +55,7 @@ def get_quicklook(netcdf_path: str,
             try:
                 loaded_module = getattr(sys.modules[product_config['module']], product_config['module_function'])
                 # Call module
-                response_code, response, content_type = loaded_module(netcdf_path, query_string, http_host, url_scheme, products, product_config)
+                response_code, response, content_type = loaded_module(netcdf_path, query_string, http_host, url_scheme, products, product_config, api)
             except HTTPError as he:
                 response_code = he.response_code
                 response = he.response

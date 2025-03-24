@@ -297,7 +297,7 @@ def _size_x_y(xr_dataset):
     logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
     return 2000, 2000
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title):
+def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title, api):
     """"Add all needed web metadata to the generated map file."""
     bn = os.path.basename(orig_netcdf_path)
     if bn not in summary_cache:
@@ -308,7 +308,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
         else:
             summary_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
-    map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
+    map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/{api}{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.web.metadata.set("wms_feature_info_mime_type", "text/html")

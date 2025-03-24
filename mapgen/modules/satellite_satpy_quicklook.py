@@ -71,7 +71,8 @@ def generate_satpy_quicklook(netcdf_path: str,
                              http_host: str,
                              url_scheme: str,
                              satpy_products: list = [],
-                             product_config: dict = {}):
+                             product_config: dict = {},
+                             api = None):
     
     full_request = _parse_request(query_string)
 

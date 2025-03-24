@@ -81,7 +81,7 @@ def app(environ, start_response):
     if (environ['PATH_INFO'].startswith('/api/get_quicklook') or
         environ['PATH_INFO'].startswith('/klimakverna') ) and environ['REQUEST_METHOD'] == 'GET':
         try:
-            api = 'get_quicklook'
+            api = 'api/get_quicklook'
             if 'klimakverna' in environ['PATH_INFO']:
                 api = 'klimakverna'
             netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
