@@ -348,6 +348,20 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
     _x, _y = _size_x_y(xr_dataset)
     logger.debug(f"x and y dimensions in dataset {_x} {_y}")
     map_object.setSize(_x, _y)
+
+    map_object.scalebar.status = mapscript.MS_EMBED
+    map_object.scalebar.position = mapscript.MS_LR
+    map_object.scalebar.units = mapscript.MS_KILOMETERS
+    map_object.scalebar.intervals = 1
+    map_object.scalebar.outlinecolor.setRGB(0, 0, 0)
+    #map_object.scalebar.height = 1
+
+    image_gif_puf = mapscript.outputFormatObj("GD/GIF", "gif")
+    image_gif_puf.mimetype = "image/gif"
+    image_gif_puf.imagemode = mapscript.MS_IMAGEMODE_RGB
+    image_gif_puf.extension = "gif"
+    map_object.appendOutputFormat(image_gif_puf)
+
     return
 
 def _find_projection(ds, variable, grid_mapping_cache):
