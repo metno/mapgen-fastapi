@@ -668,8 +668,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
         style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
 
-    layer.template = "/tmp/templatename"
-
+    layer.template = os.path.join(_get_mapfiles_path(product_config), "templatename")
 
     return True
 
@@ -1534,7 +1533,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             logger.debug(f"After colormap min max {min_val} {max_val}")
 
     # Generate GetFeatureInfo template
-    get_feature_info_filename = f'/tmp/getfeature-info-{actual_variable}.html'
+    get_feature_info_filename = os.path.join(_get_mapfiles_path(product_config), f'/getfeature-info-{actual_variable}.html')
     if not os.path.exists(get_feature_info_filename):
         with open(get_feature_info_filename, 'w') as gfi:
             gfi.write("<!-- MapServer Template -->\n")
