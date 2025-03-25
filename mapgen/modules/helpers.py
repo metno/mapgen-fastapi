@@ -1533,7 +1533,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             logger.debug(f"After colormap min max {min_val} {max_val}")
 
     # Generate GetFeatureInfo template
-    get_feature_info_filename = os.path.join(_get_mapfiles_path(product_config), f'/getfeature-info-{actual_variable}.html')
+    get_feature_info_filename = os.path.join(_get_mapfiles_path(product_config), f'getfeature-info-{actual_variable}.html')
     if not os.path.exists(get_feature_info_filename):
         with open(get_feature_info_filename, 'w') as gfi:
             gfi.write("<!-- MapServer Template -->\n")
