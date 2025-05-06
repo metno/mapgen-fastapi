@@ -349,12 +349,13 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
     logger.debug(f"x and y dimensions in dataset {_x} {_y}")
     map_object.setSize(_x, _y)
 
-    map_object.scalebar.status = mapscript.MS_EMBED
-    map_object.scalebar.position = mapscript.MS_LR
-    map_object.scalebar.units = mapscript.MS_KILOMETERS
-    map_object.scalebar.intervals = 1
-    map_object.scalebar.outlinecolor.setRGB(0, 0, 0)
-    #map_object.scalebar.height = 1
+    # Causing more trouble than use. Skip for now
+    # map_object.scalebar.status = mapscript.MS_EMBED
+    # map_object.scalebar.position = mapscript.MS_LR
+    # map_object.scalebar.units = mapscript.MS_KILOMETERS
+    # map_object.scalebar.intervals = 1
+    # map_object.scalebar.outlinecolor.setRGB(0, 0, 0)
+    # #map_object.scalebar.height = 1
 
     image_gif_puf = mapscript.outputFormatObj("GD/GIF", "gif")
     image_gif_puf.mimetype = "image/gif"
