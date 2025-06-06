@@ -647,10 +647,13 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
 
     if product_config.get('styles'):
         try:
-            layer.classgroup = product_config['styles'][0]['name']
             for style_config in product_config['styles']:
-                set_styles(layer, style_config)
-
+                if style_config['name'] == variable:
+                    layer.classgroup = style_config['name']
+                    set_styles(layer, style_config)
+                    break
+            else:
+                logger.error(f"Could not find style config matching layer/variable name {variable}. Please add this to the config. No style for this layer is added.")
         except Exception as ex:
             logger.exception(f"Problems in setting styles: {ex}")
     else:
@@ -674,19 +677,67 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
 
     return True
 
+def count_digits_total_and_decimal(number):
+    add_place = 0
+    if number < 0:
+        add_place = 1
+    # Ensure the number is positive for counting (ignore sign)
+    number = abs(number)
+
+    # Convert to string to handle the integer and decimal parts separately
+    num_str = str(number)
+
+    # Split the number into integer and decimal parts
+    is_decimal = 0
+    if '.' in num_str:
+        base, decimal = num_str.split('.')  # Split into base and decimal parts
+        is_decimal = 1
+    else:
+        base, decimal = num_str, ""  # No decimal part present
+
+    # Count digits in base and decimal parts
+    base_count = len(base)
+    decimal_count = len(decimal)
+    total_count = add_place + base_count + is_decimal + decimal_count
+    return total_count, decimal_count
+
+def total_and_decimal_count(color_intervals):
+    max_total_count = 0
+    max_decimal_count = 0
+    for color_interval in color_intervals:
+        total_count, decimal_count = count_digits_total_and_decimal(color_interval)
+        if total_count > max_total_count:
+            max_total_count = total_count
+        if decimal_count > max_decimal_count:
+            max_decimal_count = decimal_count
+    return max_total_count, max_decimal_count
+
 def set_styles(layer, style_config):
     prev_color_interval = style_config['intervals'][0]
+    total_count, decimal_count = total_and_decimal_count(style_config['intervals'])
+    if not style_config.get('legend_digit_format'):
+        logger.warning("Missing legend_digit_format. Tries to detect from values")
+        if isinstance(prev_color_interval, float):
+            style_config['legend_digit_format'] = f'{total_count}.{decimal_count}f'
+        elif isinstance(prev_color_interval, int):
+            style_config['legend_digit_format'] = f'{total_count}d'
+        else:
+            logger.warning("Could not detect. Set empty")
+            style_config['legend_digit_format'] = ''
+        logger.debug(f"Styling legent_digit_format is set to: {style_config['legend_digit_format']}")
     interval_start = 1
     interval_color_start = 0
     interval_color_end = len(style_config['colors'])
-    print(f"open_upper_interval: {style_config['open_upper_interval']}")
-    if style_config['open_upper_interval']:
+    if style_config['open_highest_interval']:
         interval_color_end = len(style_config['colors']) - 1
     if style_config['open_lowest_interval']:
-        interval_start = 0
+        # when looping in the next step skip the first interval since this is handled here.
+        extra_space_front = " " * total_count
+        logging.debug(f"open_lowest_interval {extra_space_front} < {prev_color_interval:{style_config['legend_digit_format']}}")
+        interval_start = 1
         interval_color_start = 1
         s = mapscript.classObj(layer)
-        s.name = f"  < {prev_color_interval:{style_config['legend_digit_format']}}"
+        s.name = f"{extra_space_front} < {prev_color_interval:{style_config['legend_digit_format']}}"
         s.group = style_config['name']
         s.setExpression(f'([pixel]<{prev_color_interval:0.1f})')
         _style = mapscript.styleObj(s)
@@ -694,11 +745,12 @@ def set_styles(layer, style_config):
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
     for color_interval, color in zip(style_config['intervals'][interval_start:], style_config['colors'][interval_color_start:interval_color_end]):
+        logging.debug(f"interval {prev_color_interval:{style_config['legend_digit_format']}} - {color_interval:{style_config['legend_digit_format']}}")
         s = mapscript.classObj(layer)
         s.group = style_config['name']
         s.name = f"{prev_color_interval:{style_config['legend_digit_format']}} - {color_interval:{style_config['legend_digit_format']}}"
         if color_interval == style_config['intervals'][-1]:
-                        #Is last interval, need to include the end point/max val
+            # Is last interval, need to include the end point/max val
             s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
         else:
             s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
@@ -707,7 +759,8 @@ def set_styles(layer, style_config):
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
         prev_color_interval = color_interval
-    if style_config['open_upper_interval']:
+    if style_config['open_highest_interval']:
+        logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} < ")
         s = mapscript.classObj(layer)
         s.name = f"{color_interval:{style_config['legend_digit_format']}} < "
         s.group = style_config['name']
@@ -1513,11 +1566,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
                         #     rgb = _hex_to_rgb(color)
                         #     _style.color = mapscript.colorObj(*rgb)
                         #     prev_color_interval = color_interval
-                        logger.debug(f"Alse need to replace min and max:")
-                        logger.debug(f"Min: {min_val} Max: {max_val}")
-                        min_val = style_config['intervals'][0]
-                        max_val = style_config['intervals'][-1]
-                        logger.debug(f"Min: {min_val} Max: {max_val}")
+                        # logger.debug(f"Also need to replace min and max:")
+                        # logger.debug(f"Min: {min_val} Max: {max_val}")
+                        # min_val = style_config['intervals'][0]
+                        # max_val = style_config['intervals'][-1]
+                        # logger.debug(f"Min: {min_val} Max: {max_val}")
                         break
                 else:
                     logger.error(f"No styles defined for style {style}. This is not expected when styles is defined in config.")
