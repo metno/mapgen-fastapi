@@ -75,11 +75,37 @@ def generic_quicklook(netcdf_path: str,
         logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
         raise HTTPError(response_code='404', response="Missing netcdf path")
 
+    qp = _parse_request(query_string)
+
+    # Check if mapfile already is available:
+    try:
+        if qp.get('request').lower() != 'GetCapabilities'.lower():
+            try:
+                actual_variable_from_layer = qp.get('layers',qp.get('layer'))
+                mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable_from_layer}.map')
+                if os.path.exists(mapserver_map_file):
+                    logger.debug(f"Reuse existing layer map file {mapserver_map_file}")
+                    map_object = mapscript.mapObj(mapserver_map_file)
+                    return handle_request(map_object, query_string)
+            except Exception:
+                logger.exception("Failed to generate mapfile with variable filename.")
+        else:
+            mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
+            if os.path.exists(mapserver_map_file):
+                logger.debug(f"Reuse existing getcapabilities map file {mapserver_map_file}")
+                map_object = mapscript.mapObj(mapserver_map_file)
+                return handle_request(map_object, query_string)
+    except AttributeError:
+        logger.exception("Failed during check for existing mapfiles. Possible empty query string. Continue to generate new ones.")
+    except Exception:
+        logger.exception("Failed during check for existing mapfiles for unknown reason. Continue to generate new ones.")
     # Read all variables names from the netcdf file.
     is_ncml = False
     last_ds_disk = None
     try:
+        logger.debug("Before open dataset")
         ds_disk = xr.open_dataset(netcdf_path, mask_and_scale=False)
+        logger.debug("After open dataset")
     except ValueError:
         try:
             if netcdf_path.endswith('ncml'):
@@ -139,14 +165,11 @@ def generic_quicklook(netcdf_path: str,
     symbol_file = os.path.join(_get_mapfiles_path(product_config), "symbol.sym")
     create_symbol_file(symbol_file)
  
-    qp = _parse_request(query_string)
-
     mapserver_map_file = None
     layer_no = 0
     map_object = None
     actual_variable = None
     if 'request' in qp and qp['request'] != 'GetCapabilities':
-        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
         map_object.setSymbolSet(symbol_file)
@@ -154,39 +177,36 @@ def generic_quicklook(netcdf_path: str,
         actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
+        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}.map')
     else:
         # Assume getcapabilities
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
-        if os.path.exists(mapserver_map_file):
-            logger.debug(f"Reuse existing getcapabilities map file {mapserver_map_file}")
-            map_object = mapscript.mapObj(mapserver_map_file)
-        else:
-            map_object = mapscript.mapObj()
-            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
-            map_object.setSymbolSet(symbol_file)
+        map_object = mapscript.mapObj()
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
+        map_object.setSymbolSet(symbol_file)
 
-            # Read all variables names from the netcdf file.
-            variables = list(ds_disk.keys())
-            netcdf_files = []
-            if netcdf_path.endswith('ncml'):
-                netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
-            for variable in variables:
-                if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'projection_utm', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds']:
-                    logger.debug(f"Skipping variable or dimension: {variable}")
-                    continue
-                layer = mapscript.layerObj()
-                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk, netcdf_files, product_config):
-                    layer_no = map_object.insertLayer(layer)
-                if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
-                    logger.debug(f"Add wind vector layer for {variable}.")
-                    layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
-                        layer_no = map_object.insertLayer(layer_contour)
-                if variable == 'wind_direction' and 'wind_speed' in variables:
-                    logger.debug(f"Add wind vector layer based on wind direction and speed for {variable}.")
-                    layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
-                        layer_no = map_object.insertLayer(layer_contour)
+        # Read all variables names from the netcdf file.
+        variables = list(ds_disk.keys())
+        netcdf_files = []
+        if netcdf_path.endswith('ncml'):
+            netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
+        for variable in variables:
+            if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'projection_utm', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds']:
+                logger.debug(f"Skipping variable or dimension: {variable}")
+                continue
+            layer = mapscript.layerObj()
+            if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk, netcdf_files, product_config):
+                layer_no = map_object.insertLayer(layer)
+            if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
+                logger.debug(f"Add wind vector layer for {variable}.")
+                layer_contour = mapscript.layerObj()
+                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
+                    layer_no = map_object.insertLayer(layer_contour)
+            if variable == 'wind_direction' and 'wind_speed' in variables:
+                logger.debug(f"Add wind vector layer based on wind direction and speed for {variable}.")
+                layer_contour = mapscript.layerObj()
+                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
+                    layer_no = map_object.insertLayer(layer_contour)
 
     if layer_no == 0 and not map_object:
         logger.debug(f"No layers {layer_no} or no map_object {map_object}")
