@@ -649,21 +649,8 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         try:
             layer.classgroup = product_config['styles'][0]['name']
             for style_config in product_config['styles']:
-                prev_color_interval = style_config['intervals'][0]
-                for color_interval, color in zip(style_config['intervals'][1:], style_config['colors']):
-                    s = mapscript.classObj(layer)
-                    s.name = style_config['name']
-                    s.group = style_config['name']
-                    if color_interval == style_config['intervals'][-1]:
-                        #Is last interval, need to include the end point/max val
-                        s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
-                    else:
-                        s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
+                set_styles(layer, style_config)
 
-                    _style = mapscript.styleObj(s)
-                    rgb = _hex_to_rgb(color)
-                    _style.color = mapscript.colorObj(*rgb)
-                    prev_color_interval = color_interval
         except Exception as ex:
             logger.exception(f"Problems in setting styles: {ex}")
     else:
@@ -686,6 +673,49 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     layer.template = os.path.join(_get_mapfiles_path(product_config), "templatename")
 
     return True
+
+def set_styles(layer, style_config):
+    prev_color_interval = style_config['intervals'][0]
+    interval_start = 1
+    interval_color_start = 0
+    interval_color_end = len(style_config['colors'])
+    print(f"open_upper_interval: {style_config['open_upper_interval']}")
+    if style_config['open_upper_interval']:
+        interval_color_end = len(style_config['colors']) - 1
+    if style_config['open_lowest_interval']:
+        interval_start = 0
+        interval_color_start = 1
+        s = mapscript.classObj(layer)
+        s.name = f"  < {prev_color_interval:{style_config['legend_digit_format']}}"
+        s.group = style_config['name']
+        s.setExpression(f'([pixel]<{prev_color_interval:0.1f})')
+        _style = mapscript.styleObj(s)
+        color = style_config['colors'][0]
+        rgb = _hex_to_rgb(color)
+        _style.color = mapscript.colorObj(*rgb)
+    for color_interval, color in zip(style_config['intervals'][interval_start:], style_config['colors'][interval_color_start:interval_color_end]):
+        s = mapscript.classObj(layer)
+        s.group = style_config['name']
+        s.name = f"{prev_color_interval:{style_config['legend_digit_format']}} - {color_interval:{style_config['legend_digit_format']}}"
+        if color_interval == style_config['intervals'][-1]:
+                        #Is last interval, need to include the end point/max val
+            s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
+        else:
+            s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
+
+        _style = mapscript.styleObj(s)
+        rgb = _hex_to_rgb(color)
+        _style.color = mapscript.colorObj(*rgb)
+        prev_color_interval = color_interval
+    if style_config['open_upper_interval']:
+        s = mapscript.classObj(layer)
+        s.name = f"{color_interval:{style_config['legend_digit_format']}} < "
+        s.group = style_config['name']
+        s.setExpression(f'([pixel]>{color_interval:0.1f})')
+        _style = mapscript.styleObj(s)
+        color = style_config['colors'][-1]
+        rgb = _hex_to_rgb(color)
+        _style.color = mapscript.colorObj(*rgb)
 
 def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
     dim_name = _find_dim_names(ds, variable)
@@ -1465,23 +1495,24 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             try:
                 for style_config in product_config['styles']:
                     if style_config['name'].lower() == style.lower():
-                        prev_color_interval = style_config['intervals'][0]
-                        layer.classgroup = style_config['name']
-                        for color_interval, color in zip(style_config['intervals'][1:], style_config['colors']):
-                            s = mapscript.classObj(layer)
-                            s.group = style_config['name']
-                            if color_interval == style_config['intervals'][-1]:
-                                #Is last interval, need to include the end point/max val
-                                s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
-                                s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} <= {color_interval:0.1f}"
-                            else:
-                                s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
-                                s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} < {color_interval:0.1f}"
+                        set_styles(layer, style_config)
+                        # prev_color_interval = style_config['intervals'][0]
+                        # layer.classgroup = style_config['name']
+                        # for color_interval, color in zip(style_config['intervals'][1:], style_config['colors']):
+                        #     s = mapscript.classObj(layer)
+                        #     s.group = style_config['name']
+                        #     if color_interval == style_config['intervals'][-1]:
+                        #         #Is last interval, need to include the end point/max val
+                        #         s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<={color_interval:0.1f})')
+                        #         s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} <= {color_interval:0.1f}"
+                        #     else:
+                        #         s.setExpression(f'([pixel]>={prev_color_interval:0.1f} and [pixel]<{color_interval:0.1f})')
+                        #         s.name = f"{prev_color_interval:0.1f} <= {ds[actual_variable].attrs['units']} < {color_interval:0.1f}"
 
-                            _style = mapscript.styleObj(s)
-                            rgb = _hex_to_rgb(color)
-                            _style.color = mapscript.colorObj(*rgb)
-                            prev_color_interval = color_interval
+                        #     _style = mapscript.styleObj(s)
+                        #     rgb = _hex_to_rgb(color)
+                        #     _style.color = mapscript.colorObj(*rgb)
+                        #     prev_color_interval = color_interval
                         logger.debug(f"Alse need to replace min and max:")
                         logger.debug(f"Min: {min_val} Max: {max_val}")
                         min_val = style_config['intervals'][0]

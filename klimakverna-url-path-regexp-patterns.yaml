@@ -8,6 +8,9 @@
       - name: 'Temperature'
         colors: ["#dd5f4d", "#b2182a", "#67001f", "#420114"]
         intervals: [0, 3, 4, 5, 10]
+        open_lowest_interval: false
+        open_upper_interval: false
+        legend_digit_format: '2d'
   - pattern: '^.*(ensemble-mean_ssp370_both-bc-sn2018v2005_rawbc_norway_1km_change-pr.nc|ensemble-mean_rcp26_both-bc-sn2018v2005_rawbc_norway_1km_change-pr.nc|ensemble-mean_rcp45_both-bc-sn2018v2005_rawbc_norway_1km_change-pr.nc)$'
     base_netcdf_directory: '/home/trygveas/testdata'
     module: 'mapgen.modules.generic_quicklook'
@@ -17,3 +20,6 @@
       - name: 'Change'
         colors: ["543005", "814B09", "AC6F20", "CD9E51", "E5CC90", "F1E8C6", "CBE9E1", "93D4CA", "57AFA5", "22857D", "005E55", "003C30"]
         intervals: [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]
+        open_lowest_interval: false
+        open_upper_interval: false
+        legend_digit_format: '2d'
