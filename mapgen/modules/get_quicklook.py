@@ -73,6 +73,7 @@ def get_quicklook(netcdf_path: str,
                 response = (f"Unable to access netcdf file {netcdf_path}.").encode()
                 content_type = 'text/plain'
             except Exception as e:
+                logger.exception("Exception when trying to load module.")
                 logger.debug(f"Unknown exception {str(e)}")
                 response_code = '500 Internal Server Error'
                 response = (f"Unknown server error. Please contact the server administrator.").encode()
