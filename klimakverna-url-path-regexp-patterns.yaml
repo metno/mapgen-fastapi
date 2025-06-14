@@ -6,7 +6,7 @@
     mapfiles_path: '/tmp'
     styles:
       - colors: &id021 ['#fddbc7', '#f4a482', '#d65f4d', '#b2182a', '#67001f', '#420114']
-        intervals: &id022 [-10.0, 1.0, 2.0, 3.0, 4.0, 5.0, 20.0]
+        intervals: &id022 [1.0, 2.0, 3.5, 4.0, 5.0]
         name: diff-tas_annual
         open_highest_interval: true
         open_lowest_interval: true
@@ -28,8 +28,8 @@
       - colors: *id021
         intervals: *id022
         name: diff-tas_autumn
-        open_highest_interval: false
-        open_lowest_interval: false
+        open_highest_interval: true
+        open_lowest_interval: true
 
 
       # - name: 'Temperature'
