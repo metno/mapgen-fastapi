@@ -500,7 +500,7 @@ def find_time_diff(ds, dim_name):
     return diff,diff_string,is_range
 
 def _get_time_diff(diff):
-    if diff == 'P1M' or (diff.startswith('P') and diff.endswith('Y')):
+    if isinstance(diff, str) and (diff == 'P1M' or (diff.startswith('P') and diff.endswith('Y'))):
         diff_string = diff
     elif diff < datetime.timedelta(hours=1):
         h = int(diff.seconds/60)
