@@ -462,7 +462,25 @@ def find_time_diff(ds, dim_name):
         for y,m,d,h,minute,s in zip(ds[dim_name].dt.year.data, ds[dim_name].dt.month.data, ds[dim_name].dt.day.data, ds[dim_name].dt.hour.data, ds[dim_name].dt.minute.data, ds[dim_name].dt.second.data):
             stamp = datetime.datetime(y, m, d, h, minute, s)
             if prev:
+                year_diff = stamp.year - prev.year
                 diff = stamp - prev
+                logger.debug(f"Year diff: {year_diff} {type(year_diff)}")
+                if year_diff > 0:
+                    logger.debug(f"Possible 1 or more years between stamps and possible years range: {prev} {stamp}")
+                    _y, _m, _d, _h, _min, _s, _f = (prev.year, prev.month, prev.day, prev.hour, prev.minute, prev.second, prev.microsecond)
+                    if _m == 1 and _d == 1 and _h == 0 and _min == 0 and _s == 0 and _f == 0:
+                        year_stamp = datetime.datetime(_y + year_diff, _m, _d, _h, _min, _s)
+                        logger.debug(f"prev {prev} year_stamp {year_stamp} stamp {stamp}")
+                        if year_stamp == stamp:
+                            diff = f"P{year_diff}Y"
+                        else:
+                            logger.debug("Can not find year diff. Can not use range.")
+                            is_range = False
+                            break
+                    else:
+                        logger.debug("Can not find year diff. Can not use range.")
+                        is_range = False
+                        break
                 if prev_diff and diff >= datetime.timedelta(days=28) and diff <= datetime.timedelta(days=31) and prev + diff == stamp:
                     logger.debug(f"Possible monthly range: {prev} {stamp}")
                     diff = "P1M"
@@ -482,7 +500,7 @@ def find_time_diff(ds, dim_name):
     return diff,diff_string,is_range
 
 def _get_time_diff(diff):
-    if diff == 'P1M':
+    if isinstance(diff, str) and (diff == 'P1M' or (diff.startswith('P') and diff.endswith('Y'))):
         diff_string = diff
     elif diff < datetime.timedelta(hours=1):
         h = int(diff.seconds/60)
@@ -678,9 +696,10 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     return True
 
 def count_digits_total_and_decimal(number):
-    add_place = 0
+    number_is_negative = False
+    decimal_is_zero = False
     if number < 0:
-        add_place = 1
+        number_is_negative = True
     # Ensure the number is positive for counting (ignore sign)
     number = abs(number)
 
@@ -688,29 +707,48 @@ def count_digits_total_and_decimal(number):
     num_str = str(number)
 
     # Split the number into integer and decimal parts
-    is_decimal = 0
+    is_decimal = False
     if '.' in num_str:
         base, decimal = num_str.split('.')  # Split into base and decimal parts
-        is_decimal = 1
+        is_decimal = True
+
+        if decimal == "0":
+            decimal_is_zero = True
     else:
         base, decimal = num_str, ""  # No decimal part present
 
     # Count digits in base and decimal parts
     base_count = len(base)
     decimal_count = len(decimal)
-    total_count = add_place + base_count + is_decimal + decimal_count
-    return total_count, decimal_count
+    #total_count = add_place + base_count + is_decimal + decimal_count
+    return number_is_negative, base_count, is_decimal, decimal_count, decimal_is_zero
 
 def total_and_decimal_count(color_intervals):
-    max_total_count = 0
-    max_decimal_count = 0
+    numbers_is_negative = []
+    base_counts = []
+    is_decimals = []
+    decimal_counts = []
+    decimals_is_zero = []
     for color_interval in color_intervals:
-        total_count, decimal_count = count_digits_total_and_decimal(color_interval)
-        if total_count > max_total_count:
-            max_total_count = total_count
-        if decimal_count > max_decimal_count:
-            max_decimal_count = decimal_count
-    return max_total_count, max_decimal_count
+        number_is_negative, base_count, is_decimal, decimal_count, decimal_is_zero = count_digits_total_and_decimal(color_interval)
+        numbers_is_negative.append(number_is_negative)
+        base_counts.append(base_count)
+        is_decimals.append(is_decimal)
+        decimal_counts.append(decimal_count)
+        decimals_is_zero.append(decimal_is_zero)
+
+    if all(decimals_is_zero):
+        # all of the numbers has 0 as decimal. Only use the integer part.
+        logger.debug("All decimals is 0. Don't include the decimals.")
+        total_count = max(numbers_is_negative) + max(base_counts)
+        decimal_count = 0
+    else:
+        #One or more number has not 0 as decimal.
+        logger.debug("One or more decimals is not 0. Include the decimals.")
+        total_count = max(numbers_is_negative) + max(base_counts) + max(is_decimals) + max(decimal_counts)
+        decimal_count = max(decimal_counts)
+
+    return total_count, decimal_count
 
 def set_styles(layer, style_config):
     prev_color_interval = style_config['intervals'][0]
@@ -730,9 +768,9 @@ def set_styles(layer, style_config):
     interval_color_end = len(style_config['colors'])
     if style_config['open_highest_interval']:
         interval_color_end = len(style_config['colors']) - 1
+    extra_space_front = " " * total_count
     if style_config['open_lowest_interval']:
         # when looping in the next step skip the first interval since this is handled here.
-        extra_space_front = " " * total_count
         logging.debug(f"open_lowest_interval {extra_space_front} < {prev_color_interval:{style_config['legend_digit_format']}}")
         interval_start = 1
         interval_color_start = 1
@@ -762,7 +800,7 @@ def set_styles(layer, style_config):
     if style_config['open_highest_interval']:
         logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} < ")
         s = mapscript.classObj(layer)
-        s.name = f"{color_interval:{style_config['legend_digit_format']}} < "
+        s.name = f"{extra_space_front} > {color_interval:{style_config['legend_digit_format']}}"
         s.group = style_config['name']
         s.setExpression(f'([pixel]>{color_interval:0.1f})')
         _style = mapscript.styleObj(s)

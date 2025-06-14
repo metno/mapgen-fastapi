@@ -82,11 +82,13 @@ def generic_quicklook(netcdf_path: str,
         if qp.get('request').lower() != 'GetCapabilities'.lower():
             try:
                 actual_variable_from_layer = qp.get('layers',qp.get('layer'))
-                mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable_from_layer}.map')
+                actual_variable_from_time = qp.get('time','notime')
+                mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable_from_layer}-{actual_variable_from_time}.map')
                 if os.path.exists(mapserver_map_file):
                     logger.debug(f"Reuse existing layer map file {mapserver_map_file}")
                     map_object = mapscript.mapObj(mapserver_map_file)
                     return handle_request(map_object, query_string)
+                logger.debug(f"Need to generate mapfile {mapserver_map_file}")
             except Exception:
                 logger.exception("Failed to generate mapfile with variable filename.")
         else:
@@ -177,7 +179,8 @@ def generic_quicklook(netcdf_path: str,
         actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
-        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}.map')
+        actual_variable_from_time = qp.get('time', 'notime')
+        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_time}.map')
     else:
         # Assume getcapabilities
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
