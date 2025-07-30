@@ -79,7 +79,8 @@ def generic_quicklook(netcdf_path: str,
 
     # Check if mapfile already is available:
     try:
-        if qp.get('request').lower() != 'GetCapabilities'.lower():
+        request = qp.get('request')
+        if request and request.lower() != 'getcapabilities':
             try:
                 actual_variable_from_layer = qp.get('layers',qp.get('layer'))
                 actual_variable_from_time = qp.get('time','notime')
@@ -92,6 +93,7 @@ def generic_quicklook(netcdf_path: str,
             except Exception:
                 logger.exception("Failed to generate mapfile with variable filename.")
         else:
+            # Assume getcapabilities
             mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
             if os.path.exists(mapserver_map_file):
                 logger.debug(f"Reuse existing getcapabilities map file {mapserver_map_file}")
@@ -171,7 +173,7 @@ def generic_quicklook(netcdf_path: str,
     layer_no = 0
     map_object = None
     actual_variable = None
-    if 'request' in qp and qp['request'] != 'GetCapabilities':
+    if 'request' in qp and qp['request'].lower() != 'getcapabilities':
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
         map_object.setSymbolSet(symbol_file)
