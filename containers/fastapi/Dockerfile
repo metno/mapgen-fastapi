@@ -68,6 +68,10 @@ RUN set -ex \
     && /bin/true \
     && mkdir -p /var/lib/unit/ \
     && mkdir -p /docker-entrypoint.d/ \
+    && mkdir -p /var/log/unit/ \
+    && touch /var/log/unit/unit.log \
+    && chmod go+rx /var/log/unit/unit.log \
+    && chmod u+rwx /var/log/unit/unit.log \
     && apt-get update \
     && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) \
     && apt-get purge -y --auto-remove build-essential \
