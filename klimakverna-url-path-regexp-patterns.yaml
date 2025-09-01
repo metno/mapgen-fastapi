@@ -50,3 +50,35 @@
         open_lowest_interval: false
         open_upper_interval: false
         legend_digit_format: '2d'
+  - base_netcdf_directory: /lustre/storeB/project/KSS/dataOnThredds/Klima_i_Norge/utgave2025/ClimateStatistics/change-pr
+    mapfiles_path: /mapfiles
+    module: mapgen.modules.generic_quicklook
+    module_function: generic_quicklook
+    pattern: ^.*(_norway_1km_change-pr)(.nc|.nc4)$
+    styles:
+    - colors: &id033 ['#D7B36A', '#E9D39D', '#EEE8C8', '#CEE9DF', '#A0DAD1', '#6EC0B5',
+        '#3A9B92', '#147870', '#00594F', '#003C30']
+      intervals: &id034 [-8.0, -4.0, 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0]
+      name: change-pr_annual
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id033
+      intervals: *id034
+      name: change-pr_winter
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id033
+      intervals: *id034
+      name: change-pr_spring
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id033
+      intervals: *id034
+      name: change-pr_summer
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id033
+      intervals: *id034
+      name: change-pr_autumn
+      open_highest_interval: true
+      open_lowest_interval: true

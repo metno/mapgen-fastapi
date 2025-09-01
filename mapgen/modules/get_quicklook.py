@@ -45,7 +45,7 @@ def get_quicklook(netcdf_path: str,
         content_type = 'text/plain'
     else:        
         logger.debug(f"{products}")
-        if api == 'klimakverna':
+        if api == 'KSS' or api == 'klimakverna':
             product_config, response, response_code, content_type = find_config_for_this_netcdf(netcdf_path,
                                                                                                 regexp_config_filename='klimakverna-url-path-regexp-patterns.yaml')
         else:
