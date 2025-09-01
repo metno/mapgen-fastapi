@@ -82,15 +82,16 @@ def app(environ, start_response):
         environ['PATH_INFO'].startswith('/klimakverna') or
         environ['PATH_INFO'].startswith('/KSS') ) and environ['REQUEST_METHOD'] == 'GET':
         try:
-            if 'klimakverna' in environ['PATH_INFO']:
+            netcdf_path = environ['PATH_INFO']
+            if 'klimakverna' in netcdf_path:
                 api = 'klimakverna'
                 netcdf_path = netcdf_path.replace('/klimakverna','')
-            elif 'KSS' in environ['PATH_INFO']:
+            elif 'KSS' in netcdf_path:
                 api = 'KSS'
                 netcdf_path = netcdf_path.replace('/KSS','')
             else:
                 api = 'api/get_quicklook'
-                netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
+                netcdf_path = netcdf_path.replace('/api/get_quicklook','')
             query_string = environ['QUERY_STRING']
             try:
                 url_scheme = environ.get('HTTP_X_FORWARDED_PROTO',
