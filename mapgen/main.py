@@ -79,13 +79,18 @@ def app(environ, start_response):
         logging.debug(f"{k}: {environ[k]}")
     q = Queue()
     if (environ['PATH_INFO'].startswith('/api/get_quicklook') or
-        environ['PATH_INFO'].startswith('/klimakverna') ) and environ['REQUEST_METHOD'] == 'GET':
+        environ['PATH_INFO'].startswith('/klimakverna') or
+        environ['PATH_INFO'].startswith('/KSS') ) and environ['REQUEST_METHOD'] == 'GET':
         try:
-            api = 'api/get_quicklook'
             if 'klimakverna' in environ['PATH_INFO']:
                 api = 'klimakverna'
-            netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
-            netcdf_path = netcdf_path.replace('/klimakverna','')
+                netcdf_path = netcdf_path.replace('/klimakverna','')
+            elif 'KSS' in environ['PATH_INFO']:
+                api = 'KSS'
+                netcdf_path = netcdf_path.replace('/KSS','')
+            else:
+                api = 'api/get_quicklook'
+                netcdf_path = environ['PATH_INFO'].replace('/api/get_quicklook','')
             query_string = environ['QUERY_STRING']
             try:
                 url_scheme = environ.get('HTTP_X_FORWARDED_PROTO',
