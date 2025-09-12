@@ -675,6 +675,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
         except Exception as ex:
             logger.exception(f"Problems in setting styles: {ex}")
     else:
+        layer.classgroup = 'raster'
         s = mapscript.classObj(layer)
         s.name = "contour"
         s.group = "contour"

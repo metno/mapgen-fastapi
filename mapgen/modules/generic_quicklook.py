@@ -84,7 +84,10 @@ def generic_quicklook(netcdf_path: str,
             try:
                 actual_variable_from_layer = qp.get('layers',qp.get('layer'))
                 actual_variable_from_time = qp.get('time','notime')
-                mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable_from_layer}-{actual_variable_from_time}.map')
+                actual_variable_from_styles = qp.get('styles', 'default-style')
+                if not actual_variable_from_styles:
+                    actual_variable_from_styles = 'default-style'
+                mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable_from_layer}-{actual_variable_from_styles}-{actual_variable_from_time}.map')
                 if os.path.exists(mapserver_map_file):
                     logger.debug(f"Reuse existing layer map file {mapserver_map_file}")
                     map_object = mapscript.mapObj(mapserver_map_file)
@@ -182,7 +185,10 @@ def generic_quicklook(netcdf_path: str,
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
         actual_variable_from_time = qp.get('time', 'notime')
-        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_time}.map')
+        actual_variable_from_styles = qp.get('styles', 'default-style')
+        if not actual_variable_from_styles:
+            actual_variable_from_styles = 'default-style'
+        mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_styles}-{actual_variable_from_time}.map')
     else:
         # Assume getcapabilities
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
