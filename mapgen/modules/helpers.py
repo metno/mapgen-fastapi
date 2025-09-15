@@ -104,6 +104,7 @@ def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-re
     return regexp_pattern_module, response.encode(), response_code, content_type
 
 def _generate_json_legend(product_config, style):
+    """"This should not be supported, but is a hack to provide styles info."""
     logger.debug("Try to generate legend info from style config.")
     legend = {}
     styles = product_config.get('styles', [])
