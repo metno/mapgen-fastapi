@@ -91,7 +91,7 @@ def generic_quicklook(netcdf_path: str,
                 if os.path.exists(mapserver_map_file):
                     logger.debug(f"Reuse existing layer map file {mapserver_map_file}")
                     map_object = mapscript.mapObj(mapserver_map_file)
-                    return handle_request(map_object, query_string)
+                    return handle_request(map_object, query_string, product_config)
                 logger.debug(f"Need to generate mapfile {mapserver_map_file}")
             except Exception:
                 logger.exception("Failed to generate mapfile with variable filename.")
@@ -230,4 +230,4 @@ def generic_quicklook(netcdf_path: str,
     map_object.save(mapserver_map_file)
 
     # Handle the request and return results.
-    return handle_request(map_object, query_string)
+    return handle_request(map_object, query_string, product_config)
