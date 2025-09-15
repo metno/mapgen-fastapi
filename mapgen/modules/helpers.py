@@ -20,6 +20,7 @@ limitations under the License.
 import os
 import re
 import sys
+import json
 import yaml
 import hashlib
 import logging
@@ -102,7 +103,19 @@ def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-re
 
     return regexp_pattern_module, response.encode(), response_code, content_type
 
-def handle_request(map_object, full_request):
+def _generate_json_legend(product_config, style):
+    logger.debug("Try to generate legend info from style config.")
+    legend = {}
+    styles = product_config.get('styles', [])
+    for prod in styles:
+        if prod['name'] == style :
+            legend = prod
+            break
+    else:
+        logger.warning(f"Could not find style {style} in styles to use for json legend.")
+    return json.dumps(legend).encode()
+
+def handle_request(map_object, full_request, product_config={}):
     ows_req = mapscript.OWSRequest()
     ows_req.type = mapscript.MS_GET_REQUEST
     full_request_string = str(full_request)
@@ -163,9 +176,15 @@ def handle_request(map_object, full_request):
             logger.error(f"status_code=500, mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
             raise HTTPError(response_code='500 Internal Server Error',
                             response=f"mapscript fails to parse query parameters: {str(full_request)}, with error: {str(e)}")
-        content_type = mapscript.msIO_stripStdoutBufferContentType()
-        result = mapscript.msIO_getStdoutBufferBytes()
-        mapscript.msIO_resetHandlers()
+        if ows_req.getValueByName('REQUEST') == 'GetLegendGraphic' and ows_req.getValueByName('FORMAT') == 'application/json':
+            logger.debug("Is GetLegendGraphic with application/json")
+            content_type = "application/json"
+            style = ows_req.getValueByName('STYLE')
+            result = _generate_json_legend(product_config, style)
+        else:
+            content_type = mapscript.msIO_stripStdoutBufferContentType()
+            result = mapscript.msIO_getStdoutBufferBytes()
+            mapscript.msIO_resetHandlers()
     else:
         try:
             mapscript.msIO_installStdoutToBuffer()
@@ -312,7 +331,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.web.metadata.set("wms_feature_info_mime_type", "text/html")
-
+    map_object.web.metadata.set("wms_getlegendgraphic_formatlist", "image/png,image/gif,image/jpeg,image/png; mode=8bit,image/vnd.jpeg-png,image/vnd.jpeg-png8,application/json")
     map_object.setProjection("AUTO")
 
     # try:

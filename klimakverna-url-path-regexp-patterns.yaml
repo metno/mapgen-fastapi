@@ -1,36 +1,36 @@
 ---
-  - pattern: '^.*(ensemble-mean_ssp370_both-bc-sn2018v2005_rawbc_norway_1km_diff-tas.nc)$'
+  - pattern: '^.*(ensemble-mean_ssp370_both-bc-sn2018v2005_rawbc_norway_1km_change-pr.nc)$'
     base_netcdf_directory: '/home/trygveas/testdata'
     module: 'mapgen.modules.generic_quicklook'
     module_function: 'generic_quicklook'
     mapfiles_path: '/tmp'
     styles:
-      - colors: &id021 ['#fddbc7', '#f4a482', '#d65f4d', '#b2182a', '#67001f', '#420114']
-        intervals: &id022 [1.0, 2.0, 3.5, 4.0, 5.0]
-        name: diff-tas_annual
-        open_highest_interval: true
-        open_lowest_interval: true
-      - colors: *id021
-        intervals: *id022
-        name: diff-tas_winter
-        open_highest_interval: true
-        open_lowest_interval: true
-      - colors: *id021
-        intervals: *id022
-        name: diff-tas_spring
-        open_highest_interval: true
-        open_lowest_interval: true
-      - colors: *id021
-        intervals: *id022
-        name: diff-tas_summer
-        open_highest_interval: true
-        open_lowest_interval: true
-      - colors: *id021
-        intervals: *id022
-        name: diff-tas_autumn
-        open_highest_interval: true
-        open_lowest_interval: true
-
+    - colors: &id011 ['#D7B36A', '#E9D39D', '#EEE8C8', '#CEE9DF', '#A0DAD1', '#6EC0B5',
+        '#3A9B92', '#147870', '#00594F', '#003C30']
+      intervals: &id012 [-8.0, -4.0, 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0]
+      name: change-pr_annual
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id011
+      intervals: *id012
+      name: change-pr_winter
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id011
+      intervals: *id012
+      name: change-pr_spring
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id011
+      intervals: *id012
+      name: change-pr_summer
+      open_highest_interval: true
+      open_lowest_interval: true
+    - colors: *id011
+      intervals: *id012
+      name: change-pr_autumn
+      open_highest_interval: true
+      open_lowest_interval: true
 
       # - name: 'Temperature'
       #   colors: ["#dd5f4d", "#b2182a", "#67001f", "#420114"]
