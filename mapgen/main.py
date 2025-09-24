@@ -22,9 +22,12 @@ import time
 import logging
 import threading
 from random import randrange
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Manager
 from mapgen.modules.get_quicklook import get_quicklook
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+manager = Manager()
+shared_cache = manager.dict()
 
 logging_cfg = {
     'version': 1,
@@ -58,10 +61,10 @@ logging_cfg = {
     }
 }
 
-def start_processing(api, netcdf_path, query_string, netloc, scheme, q):
+def start_processing(api, netcdf_path, query_string, netloc, scheme, q, shared_cache):
     try:
         start = time.time()
-        response_code, response, content_type = get_quicklook(netcdf_path, query_string, netloc, scheme, products=None, api=api)
+        response_code, response, content_type = get_quicklook(netcdf_path, query_string, netloc, scheme, shared_cache, products=None, api=api)
         end = time.time()
         logging.debug(f"qet_quicklook completed in: {end - start:f}seconds")
         start = end
@@ -107,7 +110,8 @@ def app(environ, start_response):
                               query_string,
                               http_host,
                               url_scheme,
-                              q))
+                              q,
+                              shared_cache))
             p.start()
             end = time.time()
             logging.debug(f"Started processing in {end - start:f}seconds")

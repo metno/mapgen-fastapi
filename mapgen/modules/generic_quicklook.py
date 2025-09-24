@@ -56,6 +56,7 @@ def generic_quicklook(netcdf_path: str,
                       query_string: str,
                       http_host: str,
                       url_scheme: str,
+                      shared_cache,
                       satpy_products: list = [],
                       product_config: dict = {},
                       api = None):
@@ -191,6 +192,7 @@ def generic_quicklook(netcdf_path: str,
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_styles}-{actual_variable_from_time}.map')
     else:
         # Assume getcapabilities
+        logger.debug(f'grid_mapping_cache {grid_mapping_cache}')
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)

@@ -53,25 +53,27 @@ class HTTPError(Exception):
         return(repr(f"{self.response_code}: {self.response}"))
  
     
-def _read_config_file(regexp_config_file):
-    logger.debug(f"{regexp_config_file}")
-    regexp_config = None
-    try:
-        if os.path.exists(regexp_config_file):
-            with open(regexp_config_file) as f:
-                regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
-    except Exception as e:
-        logger.debug(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
-        pass
-    return regexp_config
+def _read_config_file(regexp_config_filename, regexp_config_dir, shared_cache):
+    if regexp_config_filename not in shared_cache:
+        if os.path.exists(os.path.join('./', regexp_config_filename)):
+            regexp_config_file = os.path.join('./', regexp_config_filename)
+        else:
+            regexp_config_file = os.path.join(regexp_config_dir,
+                                            regexp_config_filename)
+        logger.debug(f"Config file to use: {regexp_config_file}")
+        regexp_config = None
+        try:
+            if os.path.exists(regexp_config_file):
+                with open(regexp_config_file) as f:
+                    regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
+        except Exception as e:
+            logger.debug(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
+            pass
+        shared_cache[regexp_config_filename] = regexp_config
+    return shared_cache[regexp_config_filename]
 
-def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
-    if os.path.exists(os.path.join('./', regexp_config_filename)):
-        regexp_config_file = os.path.join('./', regexp_config_filename)
-    else:
-        regexp_config_file = os.path.join(regexp_config_dir,
-                                          regexp_config_filename)
-    regexp_config = _read_config_file(regexp_config_file)
+def find_config_for_this_netcdf(netcdf_path, shared_cache, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
+    regexp_config = _read_config_file(regexp_config_filename, regexp_config_dir, shared_cache)
     regexp_pattern_module = None
     content_type = 'text/plain'
     response = ''
@@ -86,7 +88,7 @@ def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-re
                     regexp_pattern_module = url_path_regexp_pattern
                     break
             else:
-                logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_filename}.")
                 logger.debug("Please review your config if you expect this path to be handled.")
             
         except Exception as e:
