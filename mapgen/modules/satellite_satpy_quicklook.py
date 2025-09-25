@@ -70,6 +70,7 @@ def generate_satpy_quicklook(netcdf_path: str,
                              query_string: str,
                              http_host: str,
                              url_scheme: str,
+                             shared_cache,
                              satpy_products: list = [],
                              product_config: dict = {},
                              api = None):
