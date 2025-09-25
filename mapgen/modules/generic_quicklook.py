@@ -46,9 +46,9 @@ from mapgen.modules.helpers import handle_request, _fill_metadata_to_mapfile, _p
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
 from mapgen.modules.helpers import _parse_request, _read_netcdfs_from_ncml, HTTPError
 
-grid_mapping_cache = {}
-summary_cache = {}
-wind_rotation_cache = {}
+# grid_mapping_cache = {}
+# summary_cache = {}
+# wind_rotation_cache = {}
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ def generic_quicklook(netcdf_path: str,
                       query_string: str,
                       http_host: str,
                       url_scheme: str,
+                      shared_cache,
                       satpy_products: list = [],
                       product_config: dict = {},
                       api = None):
@@ -178,10 +179,10 @@ def generic_quicklook(netcdf_path: str,
     actual_variable = None
     if 'request' in qp and qp['request'].lower() != 'getcapabilities':
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, shared_cache, "Generic netcdf WMS", api)
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache, last_ds_disk)
+        actual_variable = _generate_layer(layer, ds_disk, shared_cache, netcdf_path, qp, map_object, product_config, last_ds_disk)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
         actual_variable_from_time = qp.get('time', 'notime')
@@ -191,9 +192,10 @@ def generic_quicklook(netcdf_path: str,
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_styles}-{actual_variable_from_time}.map')
     else:
         # Assume getcapabilities
+        logger.debug(f'grid_mapping_cache {shared_cache}')
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "Generic netcdf WMS", api)
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, shared_cache, "Generic netcdf WMS", api)
         map_object.setSymbolSet(symbol_file)
 
         # Read all variables names from the netcdf file.
@@ -206,17 +208,17 @@ def generic_quicklook(netcdf_path: str,
                 logger.debug(f"Skipping variable or dimension: {variable}")
                 continue
             layer = mapscript.layerObj()
-            if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, last_ds_disk, netcdf_files, product_config):
+            if _generate_getcapabilities(layer, ds_disk, variable, shared_cache, netcdf_path, last_ds_disk, netcdf_files, product_config):
                 layer_no = map_object.insertLayer(layer)
             if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                 logger.debug(f"Add wind vector layer for {variable}.")
                 layer_contour = mapscript.layerObj()
-                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=False, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
+                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, shared_cache, netcdf_path, direction_speed=False, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
                     layer_no = map_object.insertLayer(layer_contour)
             if variable == 'wind_direction' and 'wind_speed' in variables:
                 logger.debug(f"Add wind vector layer based on wind direction and speed for {variable}.")
                 layer_contour = mapscript.layerObj()
-                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
+                if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, shared_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
                     layer_no = map_object.insertLayer(layer_contour)
 
     if layer_no == 0 and not map_object:

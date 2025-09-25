@@ -45,16 +45,13 @@ from mapgen.modules.helpers import handle_request, _parse_filename, _get_mapfile
 from mapgen.modules.helpers import _generate_getcapabilities, _generate_getcapabilities_vector, _generate_layer
 from mapgen.modules.helpers import _parse_request, HTTPError
 
-grid_mapping_cache = {}
-wind_rotation_cache = {}
-summary_cache = {}
-
 logger = logging.getLogger(__name__)
 
 def arome_arctic_quicklook(netcdf_path: str,
                            query_string: str,
                            http_host: str,
                            url_scheme: str,
+                           shared_cache,
                            satpy_products: list = [],
                            product_config: dict = {},
                            api = None):
@@ -93,10 +90,10 @@ def arome_arctic_quicklook(netcdf_path: str,
     if 'request' in qp and qp['request'] != 'GetCapabilities':
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}.map')
         map_object = mapscript.mapObj()
-        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic.", api)
+        _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, shared_cache, "WMS Arome Arctic.", api)
         map_object.setSymbolSet(symbol_file)
         layer = mapscript.layerObj()
-        actual_variable = _generate_layer(layer, ds_disk, grid_mapping_cache, netcdf_path, qp, map_object, product_config, wind_rotation_cache)
+        actual_variable = _generate_layer(layer, ds_disk, shared_cache, netcdf_path, qp, map_object, product_config, shared_cache)
         if actual_variable:
             layer_no = map_object.insertLayer(layer)
     else:
@@ -107,7 +104,7 @@ def arome_arctic_quicklook(netcdf_path: str,
             map_object = mapscript.mapObj(mapserver_map_file)
         else:
             map_object = mapscript.mapObj()
-            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, summary_cache, "WMS Arome Arctic", api)
+            _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, shared_cache, "WMS Arome Arctic", api)
             map_object.setSymbolSet(symbol_file)
             # Read all variables names from the netcdf file.
             variables = list(ds_disk.keys())
@@ -116,12 +113,12 @@ def arome_arctic_quicklook(netcdf_path: str,
                     logger.debug(f"Skipping variable or dimension: {variable}")
                     continue
                 layer = mapscript.layerObj()
-                if _generate_getcapabilities(layer, ds_disk, variable, grid_mapping_cache, netcdf_path, product_config=product_config):
+                if _generate_getcapabilities(layer, ds_disk, variable, shared_cache, netcdf_path, product_config=product_config):
                     layer_no = map_object.insertLayer(layer)
                 if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                     logger.debug(f"Add wind vector layer for {variable}.")
                     layer_contour = mapscript.layerObj()
-                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, grid_mapping_cache, netcdf_path, product_config=product_config):
+                    if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, shared_cache, netcdf_path, product_config=product_config):
                         layer_no = map_object.insertLayer(layer_contour)
 
     map_object.save(mapserver_map_file)

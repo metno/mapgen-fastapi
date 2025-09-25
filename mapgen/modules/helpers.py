@@ -53,25 +53,27 @@ class HTTPError(Exception):
         return(repr(f"{self.response_code}: {self.response}"))
  
     
-def _read_config_file(regexp_config_file):
-    logger.debug(f"{regexp_config_file}")
-    regexp_config = None
-    try:
-        if os.path.exists(regexp_config_file):
-            with open(regexp_config_file) as f:
-                regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
-    except Exception as e:
-        logger.debug(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
-        pass
-    return regexp_config
+def _read_config_file(regexp_config_filename, regexp_config_dir, shared_cache):
+    if regexp_config_filename not in shared_cache:
+        if os.path.exists(os.path.join('./', regexp_config_filename)):
+            regexp_config_file = os.path.join('./', regexp_config_filename)
+        else:
+            regexp_config_file = os.path.join(regexp_config_dir,
+                                            regexp_config_filename)
+        logger.debug(f"Config file to use: {regexp_config_file}")
+        regexp_config = None
+        try:
+            if os.path.exists(regexp_config_file):
+                with open(regexp_config_file) as f:
+                    regexp_config = yaml.load(f, Loader=yaml.loader.SafeLoader)
+        except Exception as e:
+            logger.debug(f"Failed to read yaml config: {regexp_config_file} with {str(e)}")
+            pass
+        shared_cache[regexp_config_filename] = regexp_config
+    return shared_cache[regexp_config_filename]
 
-def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
-    if os.path.exists(os.path.join('./', regexp_config_filename)):
-        regexp_config_file = os.path.join('./', regexp_config_filename)
-    else:
-        regexp_config_file = os.path.join(regexp_config_dir,
-                                          regexp_config_filename)
-    regexp_config = _read_config_file(regexp_config_file)
+def find_config_for_this_netcdf(netcdf_path, shared_cache, regexp_config_filename='url-path-regexp-patterns.yaml', regexp_config_dir='/config'):
+    regexp_config = _read_config_file(regexp_config_filename, regexp_config_dir, shared_cache)
     regexp_pattern_module = None
     content_type = 'text/plain'
     response = ''
@@ -86,7 +88,7 @@ def find_config_for_this_netcdf(netcdf_path, regexp_config_filename='url-path-re
                     regexp_pattern_module = url_path_regexp_pattern
                     break
             else:
-                logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_file}.")
+                logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_filename}.")
                 logger.debug("Please review your config if you expect this path to be handled.")
             
         except Exception as e:
@@ -317,16 +319,16 @@ def _size_x_y(xr_dataset):
     logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
     return 2000, 2000
 
-def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, summary_cache, wms_title, api):
+def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, shared_cache, wms_title, api):
     """"Add all needed web metadata to the generated map file."""
     bn = os.path.basename(orig_netcdf_path)
-    if bn not in summary_cache:
+    if bn not in shared_cache:
         summary = _find_summary_from_csw(bn, forecast_time, scheme, netloc)
         if summary:
-            summary_cache[bn] = summary
-            logger.debug(f"{summary_cache[bn]}")
+            shared_cache[bn] = summary
+            logger.debug(f"{shared_cache[bn]}")
         else:
-            summary_cache[bn] = "Not Available."
+            shared_cache[bn] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/{api}{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
@@ -385,17 +387,17 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
 
     return
 
-def _find_projection(ds, variable, grid_mapping_cache):
+def _find_projection(ds, variable, shared_cache):
     # Find projection
     try:
         grid_mapping_name = ds[variable].attrs['grid_mapping']
-        if grid_mapping_name not in grid_mapping_cache:
+        if grid_mapping_name not in shared_cache:
             cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
-            grid_mapping_cache[grid_mapping_name] = cs.to_proj4()
+            shared_cache[grid_mapping_name] = cs.to_proj4()
     except KeyError:
         logger.debug(f"no grid_mapping for variable {variable}. Try Compute.")
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
             del optimal_bb_area
             optimal_bb_area = None
             logger.debug(f"GRID MAPPING NAME: {grid_mapping_name}")
@@ -532,7 +534,7 @@ def _get_time_diff(diff):
         diff_string = f"P{diff.days}D"
     return diff_string
 
-def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
+def _compute_optimal_bb_area_from_lonlat(ds, shared_cache):
     resample = False
     if 'latitude' in ds and 'longitude' in ds:
         resample = True
@@ -548,7 +550,7 @@ def _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache):
         try:
             swath_def = geometry.SwathDefinition(lons=ds[lon], lats=ds[lat])
             optimal = swath_def.compute_optimal_bb_area()
-            grid_mapping_cache[grid_mapping_name] = optimal.proj_str
+            shared_cache[grid_mapping_name] = optimal.proj_str
         except ValueError as ve:
             logger.exception(f"Failed to setup swath definition and or compute optimal bb area: {str(ve)}")
             raise ValueError
@@ -581,13 +583,13 @@ def _hex_to_rgb(value: str):
     value = value.lstrip("#")
     return tuple(bytes.fromhex(value))
 
-def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
+def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for the netcdf file."""
-    grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
+    grid_mapping_name = _find_projection(ds, variable, shared_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
             ll_x = optimal_bb_area.area_extent[0]
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
@@ -599,10 +601,10 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
         logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
-    layer.setProjection(grid_mapping_cache[grid_mapping_name])
-    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+    layer.setProjection(shared_cache[grid_mapping_name])
+    if "units=km" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_KILOMETERS
-    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+    elif "units=m" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_METERS
     layer.status = 1
     layer.data = f'NETCDF:{netcdf_file}:{variable}'
@@ -619,7 +621,7 @@ def _generate_getcapabilities(layer, ds, variable, grid_mapping_cache, netcdf_fi
     logger.debug(f"wms_title {wms_title}")
     layer.metadata.set("wms_title", f"{wms_title}")
 
-    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, shared_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     if 'time' not in ds[variable].dims:
@@ -829,10 +831,10 @@ def set_styles(layer, style_config):
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
 
-def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
+def _adjust_extent_to_units(ds, variable, shared_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y):
     dim_name = _find_dim_names(ds, variable)
     try:
-        if "units=m" in grid_mapping_cache[grid_mapping_name]:
+        if "units=m" in shared_cache[grid_mapping_name]:
             if ds[variable].coords[dim_name[0]].attrs['units'] == 'km':
                 logger.debug(f"adjust extent to units VARIBLE: {variable} {dim_name[0]} from km to m")
                 ll_x *= 1000
@@ -846,14 +848,14 @@ def _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name,
         pass
     return ll_x, ll_y, ur_x, ur_y
 
-def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
+def _generate_getcapabilities_vector(layer, ds, variable, shared_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for vector fiels for the netcdf file."""
     logger.debug("ADDING vector")
-    grid_mapping_name = _find_projection(ds, variable, grid_mapping_cache)
+    grid_mapping_name = _find_projection(ds, variable, shared_cache)
     if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, grid_mapping_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
             ll_x = optimal_bb_area.area_extent[0]
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
@@ -865,7 +867,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
 
-    layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    layer.setProjection(shared_cache[grid_mapping_name])
     layer.status = 1
     if variable.startswith('x_wind'):
         x_variable = variable
@@ -884,7 +886,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, grid_mapping_cache, ne
         layer.name = f'{vector_variable_name}_vector_from_direction_and_speed'
         layer.metadata.set("wms_title", f'{vector_variable_name} vector from direction and speed')
     layer.setConnectionType(mapscript.MS_CONTOUR, "")
-    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, variable, shared_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
     dims_list = []
     if 'time' not in ds[variable].dims:
@@ -1118,7 +1120,7 @@ def _add_wind_barb_100_150(map_obj, layer, colour_tripplet, min, max):
     style_base.setSymbolByName(map_obj, f"wind_barb_{min+2}")
     return
 
-def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, product_config, wind_rotation_cache, last_ds=None):
+def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_config, last_ds=None):
     try:
         variable = qp['layer']
     except KeyError:
@@ -1167,7 +1169,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
 
 
     try:
-        grid_mapping_name = _find_projection(ds, actual_variable, grid_mapping_cache)
+        grid_mapping_name = _find_projection(ds, actual_variable, shared_cache)
 
         dimension_search = _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds)
     except KeyError as ke:
@@ -1200,11 +1202,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         layer.setProcessingKey('BANDS', f'{band_number}')
 
     set_scale_processing_key = False
-    layer.setProjection(grid_mapping_cache[grid_mapping_name])
+    layer.setProjection(shared_cache[grid_mapping_name])
 
-    if "units=km" in grid_mapping_cache[grid_mapping_name]:
+    if "units=km" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_KILOMETERS
-    elif "units=m" in grid_mapping_cache[grid_mapping_name]:
+    elif "units=m" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_METERS
     layer.status = 1
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
@@ -1270,11 +1272,11 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
             # Rotate wind direction, so it relates to the north pole, rather than to the grid's y direction.            
             unique_dataset_string = generate_unique_dataset_string(ds, actual_x_variable, requested_epsg)
             logger.debug(f"UNIQUE DS STRING {unique_dataset_string}")
-            if unique_dataset_string in wind_rotation_cache:
-                north = wind_rotation_cache[unique_dataset_string]
+            if unique_dataset_string in shared_cache:
+                north = shared_cache[unique_dataset_string]
             else:
                 north = _get_north(actual_x_variable, ds, requested_epsg)
-                wind_rotation_cache[unique_dataset_string] = north
+                shared_cache[unique_dataset_string] = north
             # north = _get_north(actual_x_variable, ds, requested_epsg)
             # te = time.time()
             # logger.debug(f"_get_north {te - ts}")
@@ -1485,7 +1487,7 @@ def _generate_layer(layer, ds, grid_mapping_cache, netcdf_file, qp, map_obj, pro
         optimal_bb_area = None
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
-    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, actual_variable, grid_mapping_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
+    ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, actual_variable, shared_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     logger.debug(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
 
