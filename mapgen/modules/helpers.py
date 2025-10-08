@@ -805,6 +805,7 @@ def set_styles(layer, style_config):
         color = style_config['colors'][0]
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
+    interval_for_loop_run = False
     for color_interval, color in zip(style_config['intervals'][interval_start:], style_config['colors'][interval_color_start:interval_color_end]):
         logging.debug(f"interval {prev_color_interval:{style_config['legend_digit_format']}} - {color_interval:{style_config['legend_digit_format']}}")
         s = mapscript.classObj(layer)
@@ -820,14 +821,10 @@ def set_styles(layer, style_config):
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
         prev_color_interval = color_interval
-    else:
-        # This will only happen if the loop is not entered. I.e. only one interval.
-        # To be sure check that the style_config['intervals'] length is 1.
-        if len(style_config['intervals']) == 1:
-            color_interval = style_config['intervals'][-1]
-        else:
-            logger.error(f"Logic error in setting styles. style_config['intervals'] should be 1 is {len(style_config['intervals'])}. This should not happen.")
-            raise ValueError("Logic error in setting styles")
+        interval_for_loop_run = True
+    # If the interval size is 1 the for loop above is not run. Need to specify the color_interval here.
+    if len(style_config['intervals']) == 1 and not interval_for_loop_run:
+        color_interval = style_config['intervals'][0]
     if style_config['open_highest_interval']:
         if len(style_config['intervals']) == 1:
             logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} <= ")
