@@ -62,6 +62,9 @@ def generic_quicklook(netcdf_path: str,
                       api = None):
     netcdf_path = netcdf_path.replace("//", "/")
     orig_netcdf_path = netcdf_path
+    if not netcdf_path:
+        logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
+        raise HTTPError(response_code='404', response="Missing netcdf path")
     try:
         if netcdf_path.startswith(product_config['base_netcdf_directory']):
             logger.debug("Request with full path. Please fix your request. Depricated from version 2.0.0.")
@@ -71,10 +74,6 @@ def generic_quicklook(netcdf_path: str,
     except KeyError:
         logger.error(f"status_code=500, Missing base dir in server config.")
         raise HTTPError(response_code='500', response="Missing base dir in server config.")
-
-    if not netcdf_path:
-        logger.error(f"status_code=404, Missing netcdf path {orig_netcdf_path}")
-        raise HTTPError(response_code='404', response="Missing netcdf path")
 
     qp = _parse_request(query_string)
 
@@ -174,7 +173,7 @@ def generic_quicklook(netcdf_path: str,
     create_symbol_file(symbol_file)
  
     mapserver_map_file = None
-    layer_no = 0
+    layer_no = -1
     map_object = None
     actual_variable = None
     if 'request' in qp and qp['request'].lower() != 'getcapabilities':
@@ -184,7 +183,10 @@ def generic_quicklook(netcdf_path: str,
         layer = mapscript.layerObj()
         actual_variable = _generate_layer(layer, ds_disk, shared_cache, netcdf_path, qp, map_object, product_config, last_ds_disk)
         if actual_variable:
+            logger.debug(f"Add layer for variable {actual_variable}.")
             layer_no = map_object.insertLayer(layer)
+        else:
+            logger.debug("No variable found to generate layer for.")
         actual_variable_from_time = qp.get('time', 'notime')
         actual_variable_from_styles = qp.get('styles', 'default-style')
         if not actual_variable_from_styles:
@@ -210,6 +212,9 @@ def generic_quicklook(netcdf_path: str,
             layer = mapscript.layerObj()
             if _generate_getcapabilities(layer, ds_disk, variable, shared_cache, netcdf_path, last_ds_disk, netcdf_files, product_config):
                 layer_no = map_object.insertLayer(layer)
+                logger.debug(f"Add to GetCapabilities layer for variable {variable} with layer number {layer_no}.")
+            else:
+                logger.debug(f"Skip for GetCapabilities layer for variable {variable}.")
             if variable.startswith('x_wind') and variable.replace('x', 'y') in variables:
                 logger.debug(f"Add wind vector layer for {variable}.")
                 layer_contour = mapscript.layerObj()
@@ -221,13 +226,13 @@ def generic_quicklook(netcdf_path: str,
                 if _generate_getcapabilities_vector(layer_contour, ds_disk, variable, shared_cache, netcdf_path, direction_speed=True, last_ds=last_ds_disk, netcdf_files=netcdf_files, product_config=product_config):
                     layer_no = map_object.insertLayer(layer_contour)
 
-    if layer_no == 0 and not map_object:
+    if layer_no == -1 or not map_object:
         logger.debug(f"No layers {layer_no} or no map_object {map_object}")
         logger.error(f"status_code=500, Could not find any variables to turn into OGC WMS layers. One "
                      "reason can be your data does not have a valid grid_mapping (Please see CF "
                      "grid_mapping), or internal resampling failed.")
         raise HTTPError(response_code='500 Internal Server Error', response=("Could not find any variables to turn into OGC WMS layers. One reason can be your data does "
-                                                     "not have a valid grid_mapping (Please see CF grid_mapping), or internal resampling failed."))
+                                                     "not have a valid grid_mapping (Please see CF grid_mapping), internal resampling failed or some other unspecified reason."))
 
     map_object.save(mapserver_map_file)
 
