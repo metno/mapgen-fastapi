@@ -820,12 +820,27 @@ def set_styles(layer, style_config):
         rgb = _hex_to_rgb(color)
         _style.color = mapscript.colorObj(*rgb)
         prev_color_interval = color_interval
+    else:
+        # This will only happen if the loop is not entered. I.e. only one interval.
+        # To be sure check that the style_config['intervals'] length is 1.
+        if len(style_config['intervals']) == 1:
+            color_interval = style_config['intervals'][-1]
+        else:
+            logger.error(f"Logic error in setting styles. style_config['intervals'] should be 1 is {len(style_config['intervals'])}. This should not happen.")
+            raise ValueError("Logic error in setting styles")
     if style_config['open_highest_interval']:
-        logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} < ")
+        if len(style_config['intervals']) == 1:
+            logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} <= ")
+        else:
+            logging.debug(f"open_highest_interval {color_interval:{style_config['legend_digit_format']}} < ")
         s = mapscript.classObj(layer)
-        s.name = f"{extra_space_front} > {color_interval:{style_config['legend_digit_format']}}"
+        if len(style_config['intervals']) == 1:
+            s.name = f"{extra_space_front} >= {color_interval:{style_config['legend_digit_format']}}"
+            s.setExpression(f'([pixel]>={color_interval:0.1f})')
+        else:
+            s.name = f"{extra_space_front} > {color_interval:{style_config['legend_digit_format']}}"
+            s.setExpression(f'([pixel]>{color_interval:0.1f})')
         s.group = style_config['name']
-        s.setExpression(f'([pixel]>{color_interval:0.1f})')
         _style = mapscript.styleObj(s)
         color = style_config['colors'][-1]
         rgb = _hex_to_rgb(color)
