@@ -70,10 +70,16 @@ def generic_quicklook(netcdf_path: str,
             logger.debug("Request with full path. Please fix your request. Depricated from version 2.0.0.")
         elif os.path.isabs(netcdf_path):
             netcdf_path = netcdf_path[1:]
-        netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
+        if product_config.get('index_and_scenario_match'):
+            # Append scenario to path
+            orig_netcdf_path = product_config['netcdf_filename']
+            netcdf_path = os.path.join(product_config['base_netcdf_directory'],
+                                       product_config['netcdf_filename'])
+        else:
+            netcdf_path = os.path.join(product_config['base_netcdf_directory'], netcdf_path)
     except KeyError:
-        logger.error(f"status_code=500, Missing base dir in server config.")
-        raise HTTPError(response_code='500', response="Missing base dir in server config.")
+        logger.error(f"status_code=500, Missing base dir or filename in server config.")
+        raise HTTPError(response_code='500', response="Missing base dir or filename in server config.")
 
     qp = _parse_request(query_string)
 
@@ -194,7 +200,7 @@ def generic_quicklook(netcdf_path: str,
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-{actual_variable}-{actual_variable_from_styles}-{actual_variable_from_time}.map')
     else:
         # Assume getcapabilities
-        logger.debug(f'grid_mapping_cache {shared_cache}')
+        # logger.debug(f'grid_mapping_cache {shared_cache}')
         mapserver_map_file = os.path.join(_get_mapfiles_path(product_config), f'{os.path.basename(orig_netcdf_path)}-getcapabilities.map')
         map_object = mapscript.mapObj()
         _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, url_scheme, http_host, ds_disk, shared_cache, "Generic netcdf WMS", api)

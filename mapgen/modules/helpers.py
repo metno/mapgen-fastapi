@@ -80,12 +80,30 @@ def find_config_for_this_netcdf(netcdf_path, shared_cache, regexp_config_filenam
     response_code = '200'
     if regexp_config:
         try:
+            got_match = False
             for url_path_regexp_pattern in regexp_config:
+                url_path_regexp_pattern['index_and_scenario_match'] = False
+                if isinstance(url_path_regexp_pattern['pattern'], str):
+                    logger.debug(f"Old style pattern {url_path_regexp_pattern['pattern']} detected. Convert to new style dict.")
+                    uprp = {}
+                    uprp['filename'] = url_path_regexp_pattern['pattern']
+                    uprp['index_and_scenario'] = None
+                    url_path_regexp_pattern['pattern'] = uprp
                 logger.debug(f"{url_path_regexp_pattern}")
-                pattern = re.compile(url_path_regexp_pattern['pattern'])
-                if pattern.match(netcdf_path):
-                    logger.debug(f"Got match. Need to load module: {url_path_regexp_pattern['module']}")
-                    regexp_pattern_module = url_path_regexp_pattern
+
+                for key, value in url_path_regexp_pattern['pattern'].items():
+                    logger.debug(f"Key: {key} Value: {value}")
+                    if value is None:
+                        continue
+                    pattern = re.compile(value)
+                    if pattern.match(netcdf_path):
+                        logger.debug(f"Got match. Need to load module: {url_path_regexp_pattern['module']}")
+                        regexp_pattern_module = url_path_regexp_pattern
+                        if key == 'index_and_scenario':
+                            regexp_pattern_module['index_and_scenario_match'] = True
+                        got_match = True
+                        break
+                if got_match:
                     break
             else:
                 logger.debug(f"Could not find any match for the path {netcdf_path} in the configuration file {regexp_config_filename}.")
@@ -1823,7 +1841,7 @@ def generate_unique_dataset_string(ds, actual_x_variable, requested_epsg):
 
 def _parse_filename(netcdf_path, product_config):
     """Parse the netcdf to return start_time."""
-    pattern_match = product_config['pattern']
+    pattern_match = product_config['pattern']['filename']
     pattern = re.compile(pattern_match)
     mtchs = pattern.match(netcdf_path)
     if mtchs:
