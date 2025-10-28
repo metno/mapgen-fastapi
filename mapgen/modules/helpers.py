@@ -321,14 +321,14 @@ def _size_x_y(xr_dataset):
 
 def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, scheme, netloc, xr_dataset, shared_cache, wms_title, api):
     """"Add all needed web metadata to the generated map file."""
-    bn = os.path.basename(orig_netcdf_path)
-    if bn not in shared_cache:
-        summary = _find_summary_from_csw(bn, forecast_time, scheme, netloc)
+    bn_summary = f'summary-{os.path.basename(orig_netcdf_path)}'
+    if bn_summary not in shared_cache:
+        summary = _find_summary_from_csw(bn_summary, forecast_time, scheme, netloc)
         if summary:
-            shared_cache[bn] = summary
-            logger.debug(f"{shared_cache[bn]}")
+            shared_cache[bn_summary] = summary
+            logger.debug(f"{shared_cache[bn_summary]}")
         else:
-            shared_cache[bn] = "Not Available."
+            shared_cache[bn_summary] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/{api}{orig_netcdf_path}")
     map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575")
@@ -387,23 +387,27 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
 
     return
 
-def _find_projection(ds, variable, shared_cache):
+def _find_projection(ds, variable, shared_cache, netcdf_file, product_config):
     # Find projection
-    try:
-        grid_mapping_name = ds[variable].attrs['grid_mapping']
-        if grid_mapping_name not in shared_cache:
-            cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
-            shared_cache[grid_mapping_name] = cs.to_proj4()
-    except KeyError:
-        logger.debug(f"no grid_mapping for variable {variable}. Try Compute.")
+    if product_config.get('resample_to_grid', None):
+        logger.debug(f"Config says resample to grid for variable {variable}. Try Compute using pyresample.")
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache, netcdf_file)
             del optimal_bb_area
             optimal_bb_area = None
             logger.debug(f"GRID MAPPING NAME: {grid_mapping_name}")
         except (KeyError, ValueError):
             logger.debug(f"no grid_mapping for variable {variable} and failed to compute. Skip this.")
             return None
+    else:
+        try:
+            grid_mapping_name = f"grid_mapping-{ds[variable].attrs['grid_mapping']}-{os.path.basename(netcdf_file)}"
+            if grid_mapping_name not in shared_cache:
+                cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
+                shared_cache[grid_mapping_name] = cs.to_proj4()
+        except KeyError:
+            logger.debug(f"no grid_mapping for variable {variable}, nor any resample to grid in config. Skip this.")
+            grid_mapping_name = None
     return grid_mapping_name
 
 def _extract_extent(ds, variable):
@@ -422,6 +426,9 @@ def _extract_extent(ds, variable):
             pass
     logger.warning(f"Fail to detect dimmension names from hardcoded values. Try to find dim names from variable")
     dim_names = _find_dim_names(ds, variable)
+    if not dim_names:
+        logger.debug(f"Failed to find dim names from variable {variable}.")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize any coords for {variable}. Valid for this service are {x_l} and {y_l}.\n")
     try:
         ll_x = min(ds[variable].coords[dim_names[0]].data)
         ur_x = max(ds[variable].coords[dim_names[0]].data)
@@ -534,7 +541,7 @@ def _get_time_diff(diff):
         diff_string = f"P{diff.days}D"
     return diff_string
 
-def _compute_optimal_bb_area_from_lonlat(ds, shared_cache):
+def _compute_optimal_bb_area_from_lonlat(ds, shared_cache, netcdf_file):
     resample = False
     if 'latitude' in ds and 'longitude' in ds:
         resample = True
@@ -545,7 +552,7 @@ def _compute_optimal_bb_area_from_lonlat(ds, shared_cache):
         lat = 'lat'
         lon = 'lon'
     if resample:
-        grid_mapping_name = "calculated_omerc"
+        grid_mapping_name = f"calculated_omerc-{os.path.basename(netcdf_file)}"
         from pyresample import geometry
         try:
             swath_def = geometry.SwathDefinition(lons=ds[lon], lats=ds[lat])
@@ -585,11 +592,11 @@ def _hex_to_rgb(value: str):
 
 def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for the netcdf file."""
-    grid_mapping_name = _find_projection(ds, variable, shared_cache)
-    if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
+    grid_mapping_name = _find_projection(ds, variable, shared_cache, netcdf_file, product_config)
+    if not grid_mapping_name or 'calculated_omerc' in grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache, netcdf_file)
             ll_x = optimal_bb_area.area_extent[0]
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
@@ -601,6 +608,7 @@ def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, la
     else:
         ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
         logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
+    logger.debug(f"Style before set capabilities projection: {grid_mapping_name}, {shared_cache[grid_mapping_name]}")
     layer.setProjection(shared_cache[grid_mapping_name])
     if "units=km" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_KILOMETERS
@@ -863,11 +871,11 @@ def _adjust_extent_to_units(ds, variable, shared_cache, grid_mapping_name, ll_x,
 def _generate_getcapabilities_vector(layer, ds, variable, shared_cache, netcdf_file, direction_speed=False, last_ds=None, netcdf_files=[], product_config=None):
     """Generate getcapabilities for vector fiels for the netcdf file."""
     logger.debug("ADDING vector")
-    grid_mapping_name = _find_projection(ds, variable, shared_cache)
-    if grid_mapping_name == 'calculated_omerc' or not grid_mapping_name:
+    grid_mapping_name = _find_projection(ds, variable, shared_cache, netcdf_file, product_config)
+    if not grid_mapping_name or 'calculated_omerc' in grid_mapping_name:
         # try make a generic bounding box from lat and lon if those exists
         try:
-            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache)
+            optimal_bb_area, grid_mapping_name = _compute_optimal_bb_area_from_lonlat(ds, shared_cache, netcdf_file)
             ll_x = optimal_bb_area.area_extent[0]
             ll_y = optimal_bb_area.area_extent[1]
             ur_x = optimal_bb_area.area_extent[2]
@@ -1181,7 +1189,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
 
 
     try:
-        grid_mapping_name = _find_projection(ds, actual_variable, shared_cache)
+        grid_mapping_name = _find_projection(ds, actual_variable, shared_cache, netcdf_file, product_config)
 
         dimension_search = _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds)
     except KeyError as ke:
@@ -1191,7 +1199,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
         logger.error(f"status_code=500, Failed with: {str(ke)}.")
         raise HTTPError(response_code='500 Internal Server Error', response=f"Failed with: {str(ke)}.")
 
-    if grid_mapping_name == 'calculated_omerc':
+    if grid_mapping_name and 'calculated_omerc' in grid_mapping_name:
         band_number = 1
     elif netcdf_file.endswith('ncml'):
         band_number = 0
@@ -1214,6 +1222,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
         layer.setProcessingKey('BANDS', f'{band_number}')
 
     set_scale_processing_key = False
+    logger.debug(f"Style before set layer projection: {grid_mapping_name}, {shared_cache[grid_mapping_name]}")
     layer.setProjection(shared_cache[grid_mapping_name])
 
     if "units=km" in shared_cache[grid_mapping_name]:
@@ -1221,6 +1230,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
     elif "units=m" in shared_cache[grid_mapping_name]:
         layer.units = mapscript.MS_METERS
     layer.status = 1
+    logger.debug(f"Grid mapping name: {grid_mapping_name}")
     if variable.endswith('_vector') or variable.endswith("_vector_from_direction_and_speed"):
 
         if netcdf_file.endswith('ncml'):
@@ -1307,7 +1317,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
             ds_xy[new_x.attrs['grid_mapping']] = ds[new_x.attrs['grid_mapping']]
         except KeyError:
             logger.debug("No grid mapping in dataset. Try use calculate.")
-            if grid_mapping_name == 'calculated_omerc':
+            if grid_mapping_name and 'calculated_omerc' in grid_mapping_name:
                 from pyresample import geometry, kd_tree
                 swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
                 optimal_bb_area = swath_def.compute_optimal_bb_area()
@@ -1339,7 +1349,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
                                                 ('x', optimal_bb_area.projection_x_coords)])
                 ds_new_y.attrs['grid_mapping'] = cf_grid_mapping
 
-        if grid_mapping_name == 'calculated_omerc':
+        if grid_mapping_name and 'calculated_omerc' in grid_mapping_name:
             ds_xy[actual_x_variable] = ds_new_x
             ds_xy[actual_y_variable] = ds_new_y
             ds_xy['x'].attrs['long_name'] = "x-coordinate in Cartesian system"
@@ -1411,8 +1421,8 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
             logger.error(f"status_code=500, Failed to parse ncml file to find individual file.")
             raise HTTPError(response_code='500 Internal Server Error', response=f"Failed to parse ncml file to find individual file.")
 
-    elif grid_mapping_name == 'calculated_omerc':
-        logger.debug("Try to resample data on the fly and using gdal vsimem.")
+    elif 'calculated_omerc' in grid_mapping_name:
+        logger.debug("Try to resample data on the fly using pyresample and using gdal vsimem to store the result.")
         from pyresample import kd_tree, geometry
         swath_def = geometry.SwathDefinition(lons=ds['longitude'], lats=ds['latitude'])
         optimal_bb_area = swath_def.compute_optimal_bb_area()
@@ -1429,10 +1439,20 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
         dst_ds.SetGeoTransform((optimal_bb_area.pixel_upper_left[0], optimal_bb_area.pixel_size_x, 0,
                                 optimal_bb_area.pixel_upper_left[1], 0, -optimal_bb_area.pixel_size_y))
         dst_ds.GetRasterBand(1).WriteArray(resampled_variable)
-        layer.data = f'/vsimem/in_memory_output_{actual_variable}.tif'
-        set_scale_processing_key = True
-        del dst_ds
+        dst_ds.FlushCache()
+
+        # Save the in-memory file to disk
+        disk_filename = os.path.join(_get_mapfiles_path(product_config), f'resample-output_{os.path.basename(netcdf_file)}-{actual_variable}.tif')
+        disk_dataset = driver.CreateCopy(disk_filename, dst_ds)
+
+        # Clean up in-memory file
         dst_ds = None
+        disk_dataset = None
+        gdal.Unlink(f'/vsimem/in_memory_output_{actual_variable}.tif')
+
+
+        layer.data = f'{disk_filename}'
+        set_scale_processing_key = True
         del driver
         driver = None
         del resampled_variable
@@ -1490,7 +1510,7 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
                 pass
         logger.debug(f"wms_title {wms_title}")
         layer.metadata.set("wms_title", f"{wms_title}")
-    if grid_mapping_name == 'calculated_omerc':
+    if 'calculated_omerc' in grid_mapping_name:
         ll_x = optimal_bb_area.area_extent[0]
         ll_y = optimal_bb_area.area_extent[1]
         ur_x = optimal_bb_area.area_extent[2]
@@ -1726,6 +1746,7 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
         loaded_module = importlib.import_module(ds[actual_variable].colormap.split(".")[0])
         cm = getattr(loaded_module, 'cm')
         tools = getattr(loaded_module, 'tools')
+        logger.debug(f"colormap to load {ds[actual_variable].colormap.split('.')[-1]}")
         colormap = getattr(cm, ds[actual_variable].colormap.split(".")[-1])
         colormap_dict = tools.get_dict(colormap, N=32)
     except ModuleNotFoundError:
@@ -1738,6 +1759,9 @@ def _colormap_from_attribute(ds, actual_variable, layer, min_val, max_val, set_s
         raise
     try:
         minmax = ds[actual_variable].minmax.split(' ')
+        logger.debug(f"minmax from attribute {minmax}")
+        min_val = float(minmax[0])
+        max_val = float(minmax[1])
         try:
             logger.debug(f"add_offset {ds[actual_variable].add_offset}")
             min_val = float(minmax[0]) - ds[actual_variable].add_offset
