@@ -24,6 +24,7 @@ import json
 import yaml
 import hashlib
 import logging
+import netCDF4
 import datetime
 import requests
 import tempfile
@@ -1627,6 +1628,34 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
             logger.debug("Len 3")
             min_val = np.nanmin(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
             max_val = np.nanmax(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data)
+            type_to_type = {'float32': 'f4', 'float64': 'f8'}
+            try:
+                if min_val == ds[actual_variable].attrs['_FillValue']:
+                    logger.debug(f"Need to rescale min_val {min_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data,
+                                                    ds[actual_variable].attrs['_FillValue'], copy=False)
+                    min_val = masked_fillvalue.min()
+                if max_val == ds[actual_variable].attrs['_FillValue']:
+                    logger.debug(f"Need to rescale max_val {max_val} due to fillvalue, FILLVALUE {ds[actual_variable].attrs['_FillValue']}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data,
+                                                    ds[actual_variable].attrs['_FillValue'], copy=False)
+                    max_val = masked_fillvalue.max()
+            except KeyError:
+                logger.debug("No _FillValue in attrs. Try to compare to default fillvalue.")
+                default_fill_value = netCDF4.default_fillvals[type_to_type[str(ds[actual_variable].encoding.get('dtype'))]]
+                if min_val == default_fill_value:
+                    logger.debug(f"Need to rescale min_val {min_val} due to default fillvalue, FILLVALUE {default_fill_value}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data,
+                                                          default_fill_value, copy=False)
+                    min_val = masked_fillvalue.min()
+                if max_val == default_fill_value:
+                    logger.debug(f"Need to rescale max_val {max_val} due to default fillvalue, FILLVALUE {default_fill_value}")
+                    masked_fillvalue = np.ma.masked_equal(ds[actual_variable][dimension_search[0]['selected_band_number'],dimension_search[1]['selected_band_number'],dimension_search[2]['selected_band_number'],:,:].data,
+                                                          default_fill_value, copy=False)
+                    max_val = masked_fillvalue.max()
+            except IndexError:
+                logger.exception("Index error trying to get min and max val for 3 dimension search.")
+
         elif not dimension_search:
             logger.debug("Dimension search empty. Possible calculated field.")
         else:
