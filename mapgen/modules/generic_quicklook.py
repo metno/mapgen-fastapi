@@ -206,7 +206,7 @@ def generic_quicklook(netcdf_path: str,
         if netcdf_path.endswith('ncml'):
             netcdf_files = _read_netcdfs_from_ncml(netcdf_path)
         for variable in variables:
-            if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'projection_utm', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds', 'crs']:
+            if variable in ['longitude', 'latitude', 'forecast_reference_time', 'projection_lambert', 'projection_utm', 'p0', 'ap', 'b' , 'Lambert_Azimuthal_Grid', 'time_bnds', 'crs', 'projection_3']:
                 logger.debug(f"Skipping variable or dimension: {variable}")
                 continue
             layer = mapscript.layerObj()
