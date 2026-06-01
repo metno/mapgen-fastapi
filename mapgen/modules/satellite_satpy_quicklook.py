@@ -156,7 +156,14 @@ def _generate_layer(start_time, satpy_product, satpy_product_filename, bucket, l
     ll_y = bounds[1]
     ur_x = bounds[2]
     ur_y = bounds[3]
-    layer.setProjection(dataset.crs.to_proj4())
+    import warnings
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="You will likely lose important projection information.*",
+            category=UserWarning,
+        )
+        layer.setProjection(dataset.crs.to_proj4())
     layer.status = 1
     layer.data = f'/vsis3/{bucket}/{start_time:%Y/%m/%d}/{satpy_product_filename}'
     layer.type = mapscript.MS_LAYER_RASTER

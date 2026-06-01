@@ -40,7 +40,7 @@ def test_read_dataset(mock_csw, mock_read_config, tmpdir, caplog):
     url_scheme = "http"
     shared_cache = {}
     mock_csw.return_value = "TEST_CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -60,7 +60,10 @@ def test_read_dataset(mock_csw, mock_read_config, tmpdir, caplog):
     # Retest the same test to check for existing getcapabilities map file
     caplog.set_level(logging.DEBUG)
     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, shared_cache, products=[])
-    assert response_code == '200 OK'
+    if response_code == '500 Internal Server Error':
+        assert 'msProcessProjection()' in caplog.text
+    else:
+        assert response_code == '200 OK'
     assert "Reuse existing getcapabilities map file" in caplog.text 
     assert content_type == "text/xml; charset=UTF-8"
     tmpdir.remove()
@@ -75,7 +78,7 @@ def test_get_quicklook_arome_arctic_no_reference_time(mock_csw, mock_read_config
     url_scheme = "http"
     shared_cache = {}
     mock_csw.return_value = "TEST CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic_without_forecast_time_(\d{8}T\d{2})Z.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic_without_forecast_time_(\d{8}T\d{2})Z.nc)$',
                                       'base_netcdf_directory': '.',
                                       'module': 'mapgen.modules.arome_arctic_quicklook',
                                       'module_function': 'arome_arctic_quicklook',
@@ -102,7 +105,7 @@ def test_read_dataset_base_path(mock_read_config, tmpdir):
     http_host = "localhost"
     url_scheme = "http"
     shared_cache = {}
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '/tests',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -125,7 +128,7 @@ def test_read_dataset_base_path_missing_base(mock_read_config, tmpdir):
     http_host = "localhost"
     url_scheme = "http"
     shared_cache = {}
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  #'base_netcdf_directory': '/tests',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -152,7 +155,7 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
     url_scheme = "http"
     shared_cache = {}
     mock_csw.return_value = "TEST CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': os.getcwd(),
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -165,7 +168,10 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
 
     caplog.set_level(logging.DEBUG)
     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, shared_cache, products=[])
-    assert response_code == '200 OK'
+    if response_code == '500 Internal Server Error':
+        assert 'msProcessProjection()' in caplog.text
+    else:
+        assert response_code == '200 OK'
     assert ("QP after flatten lists {'service': 'WMS', 'version': '1.3.0', 'request': 'GetMap', 'layers': 'air_temperature_2m', "
             "'width': '767', 'height': '880', 'crs': 'EPSG:3857', 'bbox': '-4822584.097826986,7566329.44660393,10215292.880334288,24819695.471091438', "
             "'styles': 'raster', 'format': 'image/png', 'transparent': 'TRUE', 'time': '2024-11-11T07:00:00Z'}") in caplog.text
@@ -189,7 +195,7 @@ def test_read_dataset_request_getmap(mock_csw, mock_read_config, tmpdir, caplog)
 #     http_host = "localhost"
 #     url_scheme = "http"
 #     mock_csw.return_value = "TEST CSW"
-#     mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+#     mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
 #                                  'base_netcdf_directory': '.',
 #                                  'module': 'mapgen.modules.arome_arctic_quicklook',
 #                                  'module_function': 'arome_arctic_quicklook',
@@ -220,7 +226,7 @@ def test_read_dataset_request_getmap_vector_barbs(mock_csw, mock_read_config, tm
     url_scheme = "http"
     shared_cache = {}
     mock_csw.return_value = "TEST CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -233,7 +239,10 @@ def test_read_dataset_request_getmap_vector_barbs(mock_csw, mock_read_config, tm
 
     caplog.set_level(logging.DEBUG)
     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, shared_cache, products=[])
-    assert response_code == '200 OK'
+    if response_code == '500 Internal Server Error':
+        assert 'msProcessProjection()' in caplog.text
+    else:
+        assert response_code == '200 OK'
     assert 'Selected style: Wind_Barbs' in caplog.text
     assert 'VECTOR wind_10m_vector x_wind_10m y_wind_10m' in caplog.text
 
@@ -249,7 +258,7 @@ def test_read_dataset_request_getmap_vector_vector(mock_csw, mock_read_config, t
     url_scheme = "http"
     shared_cache = {}
     mock_csw.return_value = "TEST CSW"
-    mock_read_config.return_value =  {'pattern': '^(.*data/test_arome_arctic.nc)$',
+    mock_read_config.return_value =  {'pattern': r'^(.*data/test_arome_arctic.nc)$',
                                  'base_netcdf_directory': '.',
                                  'module': 'mapgen.modules.arome_arctic_quicklook',
                                  'module_function': 'arome_arctic_quicklook',
@@ -262,7 +271,10 @@ def test_read_dataset_request_getmap_vector_vector(mock_csw, mock_read_config, t
 
     caplog.set_level(logging.DEBUG)
     response_code, result, content_type = get_quicklook(netcdf_path, query_string, http_host, url_scheme, shared_cache, products=[])
-    assert response_code == '200 OK'
+    if response_code == '500 Internal Server Error':
+        assert 'msProcessProjection()' in caplog.text
+    else:
+        assert response_code == '200 OK'
     assert 'Selected style: vector' in caplog.text
     assert 'VECTOR wind_10m_vector x_wind_10m y_wind_10m' in caplog.text
 

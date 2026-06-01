@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import json
+import warnings
 import yaml
 import hashlib
 import logging
@@ -43,6 +44,9 @@ import metpy # needed for xarray's metpy accessor
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# Keep current GDAL behavior explicit and avoid GDAL 4.0 transition warning.
+gdal.DontUseExceptions()
 
 class HTTPError(Exception):
     def __init__(self, response_code='500 Internal Server Error', response=b'', content_type='text/plain'):
@@ -310,11 +314,11 @@ def _find_summary_from_csw(search_fname, forecast_time, scheme, netloc):
     return summary_text
 
 def _size_x_y(xr_dataset):
-    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon']
-    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat']
+    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon', 'rlon']
+    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat', 'rlat']
     for x,y in zip(x_l, y_l):
         try:
-            return xr_dataset.dims[x], xr_dataset.dims[y]
+            return xr_dataset.sizes[x], xr_dataset.sizes[y]
         except KeyError:
             pass
     logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
@@ -404,17 +408,49 @@ def _find_projection(ds, variable, shared_cache, netcdf_file, product_config):
         try:
             grid_mapping_name = f"grid_mapping-{ds[variable].attrs['grid_mapping']}-{os.path.basename(netcdf_file)}"
             if grid_mapping_name not in shared_cache:
-                cs = CRS.from_cf(ds[ds[variable].attrs['grid_mapping']].attrs)
-                shared_cache[grid_mapping_name] = cs.to_proj4()
+                grid_mapping_var = ds[ds[variable].attrs['grid_mapping']]
+                # Prefer explicit proj4 from input metadata when available,
+                # especially for rotated grids where CF->PROJ conversion can be lossy.
+                proj4_attr = grid_mapping_var.attrs.get('proj4')
+                if proj4_attr:
+                    # Normalize proj string for MapServer/PROJ parser.
+                    # Some NetCDF attributes contain formatting that MapServer rejects directly.
+                    proj4_attr = " ".join(str(proj4_attr).split())
+                    if "+proj=ob_tran" in proj4_attr and "+o_lon_p=" not in proj4_attr:
+                        proj4_attr = f"{proj4_attr} +o_lon_p=0"
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message="You will likely lose important projection information.*",
+                                category=UserWarning,
+                            )
+                            shared_cache[grid_mapping_name] = CRS.from_user_input(proj4_attr).to_proj4()
+                    except Exception as ex:
+                        logger.debug(f"Could not normalize proj4 attr for {variable}: {ex}. Falling back to raw value.")
+                        shared_cache[grid_mapping_name] = proj4_attr
+                else:
+                    cs = CRS.from_cf(grid_mapping_var.attrs)
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore",
+                            message="You will likely lose important projection information.*",
+                            category=UserWarning,
+                        )
+                        shared_cache[grid_mapping_name] = cs.to_proj4()
         except KeyError:
             logger.debug(f"no grid_mapping for variable {variable}, nor any resample to grid in config. Skip this.")
             grid_mapping_name = None
     return grid_mapping_name
 
-def _extract_extent(ds, variable):
-    """Extract extent of variable."""
-    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon']
-    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat']
+def _extract_extent(ds, variable, transform_rotated=False):
+    """Extract extent of variable.
+
+    By default, extents are returned in the variable's native coordinate system.
+    Set transform_rotated=True to transform rotated grids to EPSG:4326.
+    """
+    x_l = ['x', 'X', 'Xc', 'xc', 'longitude', 'lon', 'rlon']
+    y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat', 'rlat']
     for x, y in zip(x_l, y_l):
         try:
 
@@ -422,30 +458,99 @@ def _extract_extent(ds, variable):
             ur_x = max(ds[variable].coords[x].data)
             ll_y = min(ds[variable].coords[y].data)
             ur_y = max(ds[variable].coords[y].data)
+
+            if transform_rotated:
+                ll_x, ur_x, ll_y, ur_y = _transform_rotated_extent_if_needed(ds, variable, x, y, ll_x, ur_x, ll_y, ur_y)
             return ll_x,ur_x,ll_y,ur_y
         except KeyError:
             pass
     logger.warning(f"Fail to detect dimmension names from hardcoded values. Try to find dim names from variable")
     dim_names = _find_dim_names(ds, variable)
-    if not dim_names:
+    if len(dim_names) < 2:
         logger.debug(f"Failed to find dim names from variable {variable}.")
-        raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize any coords for {variable}. Valid for this service are {x_l} and {y_l}.\n")
+        raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize at least 2 spatial coords for {variable}. Valid for this service are {x_l} and {y_l}.\n")
     try:
         ll_x = min(ds[variable].coords[dim_names[0]].data)
         ur_x = max(ds[variable].coords[dim_names[0]].data)
         ll_y = min(ds[variable].coords[dim_names[1]].data)
         ur_y = max(ds[variable].coords[dim_names[1]].data)
+
+        if transform_rotated:
+            ll_x, ur_x, ll_y, ur_y = _transform_rotated_extent_if_needed(ds, variable, dim_names[0], dim_names[1], ll_x, ur_x, ll_y, ur_y)
         return ll_x,ur_x,ll_y,ur_y
-    except KeyError:
+    except (KeyError, IndexError):
         pass
     logger.debug(f"Failed to recognize extent of variable {variable}, valid is {x_l} and {y_l} or {dim_names}(found in dataset).")
     raise HTTPError(response_code='500 Internal Server Error', response=f"Could not recognize coords for {variable}. Valid for this service are {x_l} and {y_l} or {dim_names}(found in dataset).")
 
+def _transform_rotated_extent_if_needed(ds, variable, x_coord_name, y_coord_name, ll_x, ur_x, ll_y, ur_y):
+    """Transform extent from rotated grid to EPSG:4326 if needed."""
+    try:
+        grid_mapping_name = ds[variable].attrs.get('grid_mapping')
+        if not grid_mapping_name or grid_mapping_name not in ds:
+            return ll_x, ur_x, ll_y, ur_y
+
+        grid_mapping = ds[grid_mapping_name]
+        grid_mapping_name_attr = grid_mapping.attrs.get('grid_mapping_name', '')
+
+        # Check if this is a rotated grid
+        is_rotated = (grid_mapping_name_attr == 'rotated_latitude_longitude' or 
+                     'ob_tran' in grid_mapping.attrs.get('proj4', ''))
+
+        if not is_rotated:
+            return ll_x, ur_x, ll_y, ur_y
+
+        # Get the projection string
+        proj4_str = grid_mapping.attrs.get('proj4', '')
+        if not proj4_str:
+            return ll_x, ur_x, ll_y, ur_y
+
+        logger.debug(f"Transforming rotated extent for {variable} from {proj4_str}")
+
+        # Create CRS objects
+        crs_rotated = CRS.from_proj4(proj4_str)
+        crs_wgs84 = CRS.from_epsg(4326)
+
+        # Transform the four corners to get the proper bounding box
+        from pyproj import Transformer
+        transformer = Transformer.from_crs(crs_rotated, crs_wgs84, always_xy=True)
+
+        # Transform all four corners
+        lon_ll, lat_ll = transformer.transform(ll_x, ll_y)
+        lon_ur, lat_ur = transformer.transform(ur_x, ur_y)
+        lon_ul, lat_ul = transformer.transform(ll_x, ur_y)
+        lon_lr, lat_lr = transformer.transform(ur_x, ll_y)
+
+        # Get the overall bounding box from all transformed points
+        min_lon = min(lon_ll, lon_ur, lon_ul, lon_lr)
+        max_lon = max(lon_ll, lon_ur, lon_ul, lon_lr)
+        min_lat = min(lat_ll, lat_ur, lat_ul, lat_lr)
+        max_lat = max(lat_ll, lat_ur, lat_ul, lat_lr)
+
+        logger.debug(f"Transformed extent: {min_lon} {min_lat} {max_lon} {max_lat}")
+
+        return min_lon, max_lon, min_lat, max_lat
+
+    except Exception as e:
+        logger.debug(f"Failed to transform rotated extent: {e}")
+        # Return original extent if transformation fails
+        return ll_x, ur_x, ll_y, ur_y
+
 def _find_dim_names(ds, variable):
     dims = ds[variable].dims
     dim_names = []
-    for dim in reversed(dims[1:]):
-        dim_names.append(dim)
+    for dim in dims:
+        if dim == 'time':
+            continue
+        try:
+            if ds[dim].data.size > 1:
+                dim_names.append(dim)
+        except KeyError:
+            continue
+
+    if len(dim_names) >= 2:
+        # Keep historical behavior where x-like coordinate is returned first.
+        return [dim_names[-1], dim_names[-2]]
     return dim_names
 
     # try:
@@ -607,8 +712,12 @@ def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, la
         except (KeyError, ValueError):
             return None
     else:
-        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
-        logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
+        try:
+            ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable, transform_rotated=True)
+            logger.debug(f"ll_x, ur_x, ll_y, ur_y {ll_x} {ur_x} {ll_y} {ur_y}")
+        except HTTPError as e:
+            logger.debug(f"Skipping variable {variable} in GetCapabilities due to missing spatial extent: {e}")
+            return None
     logger.debug(f"Style before set capabilities projection: {grid_mapping_name}, {shared_cache[grid_mapping_name]}")
     layer.setProjection(shared_cache[grid_mapping_name])
     if "units=km" in shared_cache[grid_mapping_name]:
@@ -644,7 +753,7 @@ def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, la
         #     logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
 
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat', 'rlon', 'rlat']:
             continue
         logger.debug(f"Checking dimension: {dim_name}")
         if dim_name in 'time':
@@ -886,7 +995,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, shared_cache, netcdf_f
         except (KeyError, ValueError):
             return None
     else:
-        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable)
+        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, variable, transform_rotated=True)
 
     layer.setProjection(shared_cache[grid_mapping_name])
     layer.status = 1
@@ -917,7 +1026,7 @@ def _generate_getcapabilities_vector(layer, ds, variable, shared_cache, netcdf_f
         except Exception:
             logger.debug("Could not use time_coverange_start global attribute. wms_timeextent is not added")
     for dim_name in ds[variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat', 'rlon', 'rlat']:
             continue
         if dim_name in 'time':
             logger.debug("handle time")
@@ -996,7 +1105,7 @@ def _find_dimensions(ds, actual_variable, variable, qp, netcdf_file, last_ds):
     # Find available dimension not larger than 1
     dimension_search = []
     for dim_name in ds[actual_variable].dims:
-        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat']:
+        if dim_name in ['x', 'X', 'Xc', 'xc', 'y', 'Y', 'Yc', 'yc', 'longitude', 'latitude', 'lon', 'lat', 'rlon', 'rlat']:
             continue
         for _dim_name in [dim_name, f'dim_{dim_name}']:
             if _dim_name == 'height' or _dim_name == 'dim_height':
@@ -1519,7 +1628,8 @@ def _generate_layer(layer, ds, shared_cache, netcdf_file, qp, map_obj, product_c
         del optimal_bb_area
         optimal_bb_area = None
     else:
-        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable)
+        # Keep native extent in render path; layer projection is also native.
+        ll_x, ur_x, ll_y, ur_y = _extract_extent(ds, actual_variable, transform_rotated=False)
     ll_x, ll_y, ur_x, ur_y = _adjust_extent_to_units(ds, actual_variable, shared_cache, grid_mapping_name, ll_x, ll_y, ur_x, ur_y)
     logger.debug(f"ll ur {ll_x} {ll_y} {ur_x} {ur_y}")
     layer.metadata.set("wms_extent", f"{ll_x} {ll_y} {ur_x} {ur_y}")
