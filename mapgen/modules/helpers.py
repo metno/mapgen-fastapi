@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import json
+import warnings
 import yaml
 import hashlib
 import logging
@@ -43,6 +44,9 @@ import metpy # needed for xarray's metpy accessor
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# Keep current GDAL behavior explicit and avoid GDAL 4.0 transition warning.
+gdal.DontUseExceptions()
 
 class HTTPError(Exception):
     def __init__(self, response_code='500 Internal Server Error', response=b'', content_type='text/plain'):
@@ -314,7 +318,7 @@ def _size_x_y(xr_dataset):
     y_l = ['y', 'Y', 'Yc', 'yc', 'latitude', 'lat', 'rlat']
     for x,y in zip(x_l, y_l):
         try:
-            return xr_dataset.dims[x], xr_dataset.dims[y]
+            return xr_dataset.sizes[x], xr_dataset.sizes[y]
         except KeyError:
             pass
     logger.warning("Failed to find x and y dimensions in dataset use default 2000 2000")
@@ -415,13 +419,25 @@ def _find_projection(ds, variable, shared_cache, netcdf_file, product_config):
                     if "+proj=ob_tran" in proj4_attr and "+o_lon_p=" not in proj4_attr:
                         proj4_attr = f"{proj4_attr} +o_lon_p=0"
                     try:
-                        shared_cache[grid_mapping_name] = CRS.from_user_input(proj4_attr).to_proj4()
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message="You will likely lose important projection information.*",
+                                category=UserWarning,
+                            )
+                            shared_cache[grid_mapping_name] = CRS.from_user_input(proj4_attr).to_proj4()
                     except Exception as ex:
                         logger.debug(f"Could not normalize proj4 attr for {variable}: {ex}. Falling back to raw value.")
                         shared_cache[grid_mapping_name] = proj4_attr
                 else:
                     cs = CRS.from_cf(grid_mapping_var.attrs)
-                    shared_cache[grid_mapping_name] = cs.to_proj4()
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore",
+                            message="You will likely lose important projection information.*",
+                            category=UserWarning,
+                        )
+                        shared_cache[grid_mapping_name] = cs.to_proj4()
         except KeyError:
             logger.debug(f"no grid_mapping for variable {variable}, nor any resample to grid in config. Skip this.")
             grid_mapping_name = None
