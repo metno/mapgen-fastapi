@@ -7,16 +7,20 @@ ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
     MAPGEN_VERSION=main
 
 # Install dependencies:
-COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/environment.yaml /tmp/environment.yaml
-RUN micromamba install -y -n base --file /tmp/environment.yaml \
+# COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-lock.yml /tmp/conda-lock.yml
+# RUN micromamba install -y -n base --file /tmp/conda-lock.yml \
+#     && micromamba clean --force-pkgs-dirs --yes
+
+COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-spec-file.txt /tmp/conda-spec-file.txt
+RUN micromamba install -y -n base --file /tmp/conda-spec-file.txt \
     && micromamba clean --force-pkgs-dirs --yes
 
-USER root
+    USER root
 RUN set -ex \
-    && ln -s /opt/conda/bin/curl /usr/bin/curl \
     && savedAptMark="$(apt-mark showmanual)" \
     && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps net-tools \
+    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps net-tools curl \
+    && ln -s /usr/bin/curl /usr/bin/fetch \
     && mkdir -p /usr/lib/unit/modules /usr/lib/unit/debug-modules \
     && mkdir -p /usr/src/unit \
     && cd /usr/src/unit \
