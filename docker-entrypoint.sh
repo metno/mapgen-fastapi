@@ -4,10 +4,16 @@ set -e
 
 WAITLOOPS=5
 SLEEPSEC=1
+SYSTEM_LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
+
+curl_cmd()
+{
+    env LD_LIBRARY_PATH="$SYSTEM_LD_LIBRARY_PATH" /usr/bin/curl "$@"
+}
 
 curl_put()
 {
-    RET=$(/usr/bin/curl -s -w '%{http_code}' -X PUT --data-binary @$1 --unix-socket /var/run/unit/control.unit.sock http://localhost/$2)
+    RET=$(curl_cmd -s -w '%{http_code}' -X PUT --data-binary @$1 --unix-socket /var/run/unit/control.unit.sock http://localhost/$2)
     RET_BODY=$(echo $RET | /bin/sed '$ s/...$//')
     RET_STATUS=$(echo $RET | /usr/bin/tail -c 4)
     if [ "$RET_STATUS" -ne "200" ]; then
@@ -41,7 +47,7 @@ if [ "$1" = "unitd" ] || [ "$1" = "unitd-debug" ]; then
         done
         # even when the control socket exists, it does not mean unit has finished initialisation
         # this curl call will get a reply once unit is fully launched
-        /usr/bin/curl -s -X GET --unix-socket /var/run/unit/control.unit.sock http://localhost/
+        curl_cmd -s -X GET --unix-socket /var/run/unit/control.unit.sock http://localhost/
 
         if /usr/bin/find "/docker-entrypoint.d/" -mindepth 1 -print -quit 2>/dev/null | /bin/grep -q .; then
             echo "$0: /docker-entrypoint.d/ is not empty, applying initial configuration..."
