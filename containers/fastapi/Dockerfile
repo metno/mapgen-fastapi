@@ -69,6 +69,7 @@ RUN set -ex \
        done \
     && apt-mark showmanual | xargs apt-mark auto > /dev/null \
     && { [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; } \
+    && apt-mark manual curl ca-certificates \
     && /bin/true \
     && mkdir -p /var/lib/unit/ \
     && mkdir -p /docker-entrypoint.d/ \
@@ -77,7 +78,7 @@ RUN set -ex \
     && chmod go+rx /var/log/unit/unit.log \
     && chmod u+rwx /var/log/unit/unit.log \
     && apt-get update \
-    && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) \
+    && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) curl ca-certificates \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /requirements.apt
@@ -88,7 +89,7 @@ USER root
 WORKDIR /app
 RUN cp -pv /opt/conda/lib/python3.12/site-packages/mapgen/favicon.ico /app
 
-ENV LD_LIBRARY_PATH=/usr/local/lib:/opt/conda/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/opt/conda/lib
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN mkdir -pv /usr/share/unit/welcome && chown -R $MAMBA_USER:$MAMBA_USER /usr/share/unit
 COPY --chown=$MAMBA_USER:$MAMBA_USER welcome.* /usr/share/unit/welcome/
