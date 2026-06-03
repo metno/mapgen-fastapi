@@ -6,22 +6,22 @@ LABEL maintainer="trygveas@met.no"
 ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
     MAPGEN_VERSION=main
 
-# Install dependencies:
-# COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-lock.yml /tmp/conda-lock.yml
-# RUN micromamba install -y -n base --file /tmp/conda-lock.yml \
+# COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-spec-file.txt /tmp/conda-spec-file.txt
+# RUN micromamba install -y -n base --file /tmp/conda-spec-file.txt \
+#     && micromamba install -y -n base -c https://repo.prefix.dev/conda-forge netcdf4 \
+#     && micromamba install -y -n base -c https://repo.prefix.dev/conda-forge lxml cmocean metpy boto3 \
 #     && micromamba clean --force-pkgs-dirs --yes
 
-COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-spec-file.txt /tmp/conda-spec-file.txt
-RUN micromamba install -y -n base --file /tmp/conda-spec-file.txt \
-    && micromamba install -y -n base -c https://repo.prefix.dev/conda-forge lxml cmocean metpy boto3 \
+COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/environment.yaml /tmp/environment.yaml
+RUN micromamba install -y -n base --file /tmp/environment.yaml \
     && micromamba clean --force-pkgs-dirs --yes
 
-    USER root
+USER root
 RUN set -ex \
+    && ln -s /opt/conda/bin/curl /usr//bin/curl \
     && savedAptMark="$(apt-mark showmanual)" \
     && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps net-tools curl \
-    && ln -s /usr/bin/curl /usr/bin/fetch \
+    && apt-get install --no-install-recommends --no-install-suggests -y ca-certificates git lsof less build-essential libssl-dev libpcre2-dev pkg-config procps net-tools \
     && mkdir -p /usr/lib/unit/modules /usr/lib/unit/debug-modules \
     && mkdir -p /usr/src/unit \
     && cd /usr/src/unit \
@@ -70,8 +70,6 @@ RUN set -ex \
        done \
     && apt-mark showmanual | xargs apt-mark auto > /dev/null \
     && { [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; } \
-    && apt-mark manual curl ca-certificates \
-    && /bin/true \
     && mkdir -p /var/lib/unit/ \
     && mkdir -p /docker-entrypoint.d/ \
     && mkdir -p /var/log/unit/ \
@@ -79,7 +77,7 @@ RUN set -ex \
     && chmod go+rx /var/log/unit/unit.log \
     && chmod u+rwx /var/log/unit/unit.log \
     && apt-get update \
-    && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) curl ca-certificates \
+    && apt-get --no-install-recommends --no-install-suggests -y install $(cat /requirements.apt) ca-certificates \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /requirements.apt
@@ -89,6 +87,11 @@ RUN /opt/conda/bin/pip install "git+${MAPGEN_REPO}@${MAPGEN_VERSION}" xncml
 USER root
 WORKDIR /app
 RUN cp -pv /opt/conda/lib/python3.12/site-packages/mapgen/favicon.ico /app
+
+# Register conda libs with the system linker so C extensions (netCDF4, lxml etc.)
+# find their native dependencies regardless of LD_LIBRARY_PATH at runtime.
+RUN echo "/opt/conda/lib" > /etc/ld.so.conf.d/conda.conf && ldconfig \
+    && ln -sf /opt/conda/lib/libxml2.so.16 /opt/conda/lib/libxml2.so.2
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:/opt/conda/lib:/usr/local/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

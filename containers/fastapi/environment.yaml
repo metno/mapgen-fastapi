@@ -8,18 +8,18 @@ dependencies:
 - Jinja2
 #- gunicorn
 - pyyaml
-- xarray=2024.9.0 #=2024.6.0
+- xarray # =2024.9.0 #=2024.6.0
 - boto3
 - netcdf4
 - jinja2
 - pytest-mock
 - rasterio
 - pandas
-- satpy=0.52.1
-- trollimage=1.26.0
-- mapserver=8.2.2
-- gdal=3.9.2  #3.9.0
-- libgdal=3.9.2
+- satpy=0.60.0
+- trollimage
+- mapserver=8.6.0
+- gdal  #3.9.0
+- libgdal
 - cartopy
 - metpy
 - lxml
