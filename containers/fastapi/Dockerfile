@@ -13,6 +13,7 @@ ENV MAPGEN_REPO=https://github.com/metno/mapgen-fastapi.git \
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER containers/fastapi/conda-spec-file.txt /tmp/conda-spec-file.txt
 RUN micromamba install -y -n base --file /tmp/conda-spec-file.txt \
+    && micromamba install -y -n base -c https://repo.prefix.dev/conda-forge lxml cmocean metpy boto3 \
     && micromamba clean --force-pkgs-dirs --yes
 
     USER root
