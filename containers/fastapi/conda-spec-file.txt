@@ -251,7 +251,11 @@ https://repo.prefix.dev/conda-forge/linux-64/mysql-common-9.0.1-h266115a_6.conda
 https://repo.prefix.dev/conda-forge/linux-64/mysql-libs-9.0.1-he0572af_6.conda#9802ae6d20982f42c0f5d69008988763
 https://repo.prefix.dev/conda-forge/linux-64/protobuf-c-1.5.0-h5c8f2c3_4.conda#4b486eebb540245fcf97e002158d8d5a
 https://repo.prefix.dev/conda-forge/linux-64/mapserver-8.2.2-py312hf2fcc83_4.conda#3f1df2ed645ab2db371a0720eccc5f24
+https://repo.prefix.dev/conda-forge/linux-64/lxml-6.1.1-py312h63ddcf0_0.conda#03cbf03d08ba6a45f906c2542c894a52
 https://repo.prefix.dev/conda-forge/linux-64/netcdf4-1.7.2-nompi_py312h21d6d8e_101.conda#0cabc6745882859ec7be35433c7b8f24
+https://repo.prefix.dev/conda-forge/noarch/cmocean-4.0.3-pyhd8ed1ab_0.conda#53df00540de0348ed1b2a62684dd912b
+https://repo.prefix.dev/conda-forge/noarch/metpy-1.7.1-pyhd8ed1ab_0.conda#bdb9aebe518563d653773d0f91f51e6a
+https://repo.prefix.dev/conda-forge/noarch/boto3-1.43.9-pyhd8ed1ab_0.conda#85b2abe799885691c77e1ce505d99980
 https://repo.prefix.dev/conda-forge/linux-64/numcodecs-0.16.5-py312hf79963d_0.conda#86a969eeb489119374ec1d2e863777e6
 https://repo.prefix.dev/conda-forge/noarch/setuptools-82.0.1-pyh332efcf_0.conda#8e194e7b992f99a5015edbd4ebd38efd
 https://repo.prefix.dev/conda-forge/noarch/wheel-0.47.0-pyhd8ed1ab_0.conda#d0e3b2f0030cf4fca58bde71d246e94c
