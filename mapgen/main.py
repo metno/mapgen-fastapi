@@ -173,7 +173,12 @@ def app(environ, start_response):
         response_headers = [('Content-Type', content_type)]
 
     elif environ['REQUEST_METHOD'] == 'OPTIONS':
-        response_headers = [ ('Access-Control-Allow-Methods', 'GET, OPTIONS'), ('Access-Control-Allow-Headers', '*')]
+        response_headers = [
+            ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+            ('Access-Control-Allow-Headers', '*'),
+            ('Access-Control-Allow-Private-Network', 'true'),
+            ('Access-Control-Allow-Origin', '*')
+        ]
         response_code = '200 OK'
         response = b''
         logging.debug(f"OPTIONS respond, {response_headers}")
@@ -182,7 +187,8 @@ def app(environ, start_response):
         response = b"Your are not welcome here!\n"
         response_headers = [('Content-Type', content_type)]
         logging.debug(f"{response_code}, {response}, {content_type}")
-    response_headers.append(('Access-Control-Allow-Origin', '*'))
+    if ('Access-Control-Allow-Origin', '*') not in response_headers:
+        response_headers.append(('Access-Control-Allow-Origin', '*'))
     start_response(response_code, response_headers)
     logging.debug(f"Queue length: {q.qsize()}")
     return [response]
@@ -323,7 +329,12 @@ class wmsServer(BaseHTTPRequestHandler):
             pass
 
     def do_OPTIONS(self):
-        response_headers = [ ('Access-Control-Allow-Methods', 'GET, OPTIONS'), ('Access-Control-Allow-Headers', '*')]
+        response_headers = [
+            ('Access-Control-Allow-Methods', 'GET, OPTIONS'),
+            ('Access-Control-Allow-Headers', '*'),
+            ('Access-Control-Allow-Private-Network', 'true'),
+            ('Access-Control-Allow-Origin', '*')
+        ]
         response_code = '200'
         response = b''
         logging.debug(f"OPTIONS respond, {response_headers}")
