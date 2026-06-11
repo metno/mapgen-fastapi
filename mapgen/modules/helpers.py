@@ -336,7 +336,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, forecast_time, map_object, schem
             shared_cache[bn_summary] = "Not Available."
     map_object.web.metadata.set("wms_title", wms_title)
     map_object.web.metadata.set("wms_onlineresource", f"{scheme}://{netloc}/{api}{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:3575 EPSG:5041 EPSG:5042")
+    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661 EPSG:32761 EPSG:3575 EPSG:5041 EPSG:5042")
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.web.metadata.set("wms_feature_info_mime_type", "text/html")
     map_object.web.metadata.set("wms_getlegendgraphic_formatlist", "image/png,image/gif,image/jpeg,image/png; mode=8bit,image/vnd.jpeg-png,image/vnd.jpeg-png8,application/json")
