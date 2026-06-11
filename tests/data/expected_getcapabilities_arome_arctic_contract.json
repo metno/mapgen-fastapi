@@ -1,0 +1,601 @@
+{
+  "exception_formats": [
+    "XML",
+    "INIMAGE",
+    "BLANK"
+  ],
+  "layers": [
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "air_pressure_at_sea_level",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "air_pressure_at_sea_level: Mean Sea Level Pressure (MSLP)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "air_temperature_0m",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "air_temperature_0m: Surface temperature (T0M)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "air_temperature_2m",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "air_temperature_2m: Screen level temperature (T2M)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "100.0",
+          "name": "pressure",
+          "units": "hPa",
+          "values": "50.0,100.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "air_temperature_pl",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "air_temperature_pl: Air temperature pressure levels"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "120.0",
+          "name": "height2",
+          "units": "m",
+          "values": "80.0,120.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "air_temperature_z",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "air_temperature_z: Air temperature height levels"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "relative_humidity_2m",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "relative_humidity_2m: Screen level relative humidity (RH2M)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "surface_air_pressure",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "surface_air_pressure: Surface air pressure"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "surface_geopotential",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "surface_geopotential: Surface geopotential (fis)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "light-green",
+          "name": "Colour",
+          "units": "",
+          "values": "blue,red,green,cyan,magenta,yellow,light-green"
+        },
+        {
+          "default": "12",
+          "name": "Spacing",
+          "units": "pixels",
+          "values": "2,4,8,12,16,24,32"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "wind_10m_vector",
+      "queryable": "0",
+      "styles": [
+        "Vector",
+        "Wind_Barbs"
+      ],
+      "title": "wind_10m vector from x_wind_10m and y_wind_10m component"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "wind_direction",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "wind_direction: Wind direction"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "light-green",
+          "name": "Colour",
+          "units": "",
+          "values": "blue,red,green,cyan,magenta,yellow,light-green"
+        },
+        {
+          "default": "12",
+          "name": "Spacing",
+          "units": "pixels",
+          "values": "2,4,8,12,16,24,32"
+        },
+        {
+          "default": "100.0",
+          "name": "pressure",
+          "units": "hPa",
+          "values": "50.0,100.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "wind_pl_vector",
+      "queryable": "0",
+      "styles": [
+        "Vector",
+        "Wind_Barbs"
+      ],
+      "title": "wind_pl vector from x_wind_pl and y_wind_pl component"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "wind_speed",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "wind_speed: Wind speed"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "light-green",
+          "name": "Colour",
+          "units": "",
+          "values": "blue,red,green,cyan,magenta,yellow,light-green"
+        },
+        {
+          "default": "12",
+          "name": "Spacing",
+          "units": "pixels",
+          "values": "2,4,8,12,16,24,32"
+        },
+        {
+          "default": "120.0",
+          "name": "height2",
+          "units": "m",
+          "values": "80.0,120.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "wind_z_vector",
+      "queryable": "0",
+      "styles": [
+        "Vector",
+        "Wind_Barbs"
+      ],
+      "title": "wind_z vector from x_wind_z and y_wind_z component"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "x_wind_10m",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "x_wind_10m: 10 metre wind along x-coordinate (U10M)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "100.0",
+          "name": "pressure",
+          "units": "hPa",
+          "values": "50.0,100.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "x_wind_pl",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "x_wind_pl: Wind along x-coordinate on pressure levels"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "120.0",
+          "name": "height2",
+          "units": "m",
+          "values": "80.0,120.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "x_wind_z",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "x_wind_z: Wind along x-coordinate on height levels"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "y_wind_10m",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "y_wind_10m: 10 metre wind along y-coordinate (V10M)"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "100.0",
+          "name": "pressure",
+          "units": "hPa",
+          "values": "50.0,100.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "y_wind_pl",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "y_wind_pl: Wind along y-coordinate on pressure levels"
+    },
+    {
+      "bbox": {
+        "east": "-17.295131",
+        "north": "69.564065",
+        "south": "69.273533",
+        "west": "-17.956718"
+      },
+      "dimensions": [
+        {
+          "default": "120.0",
+          "name": "height2",
+          "units": "m",
+          "values": "80.0,120.0"
+        },
+        {
+          "default": "",
+          "name": "time",
+          "units": "ISO8601",
+          "values": "2024-11-11T06:00:00Z/2024-11-11T07:00:00Z/PT1H"
+        }
+      ],
+      "name": "y_wind_z",
+      "queryable": "1",
+      "styles": [
+        "contour",
+        "raster"
+      ],
+      "title": "y_wind_z: Wind along y-coordinate on height levels"
+    }
+  ],
+  "request_formats": {
+    "DescribeLayer": [
+      "text/xml"
+    ],
+    "GetCapabilities": [
+      "text/xml"
+    ],
+    "GetFeatureInfo": [
+      "text/html",
+      "application/vnd.ogc.gml",
+      "text/plain"
+    ],
+    "GetLegendGraphic": [
+      "image/png",
+      "image/gif",
+      "image/jpeg",
+      "image/png; mode=8bit",
+      "image/vnd.jpeg-png",
+      "image/vnd.jpeg-png8",
+      "application/json"
+    ],
+    "GetMap": [
+      "image/png",
+      "image/gif",
+      "image/jpeg",
+      "image/png; mode=8bit",
+      "image/vnd.jpeg-png",
+      "image/vnd.jpeg-png8",
+      "application/x-pdf",
+      "image/svg+xml",
+      "image/tiff",
+      "application/vnd.mapbox-vector-tile",
+      "application/x-protobuf",
+      "application/json"
+    ],
+    "GetStyles": [
+      "text/xml"
+    ]
+  },
+  "root_layer": {
+    "abstract": "MS",
+    "bbox": {
+      "east": "80.000000",
+      "north": "88.000000",
+      "south": "62.000000",
+      "west": "-18.000000"
+    },
+    "crs": [
+      "EPSG:3857",
+      "EPSG:3978",
+      "EPSG:4269",
+      "EPSG:4326",
+      "EPSG:25832",
+      "EPSG:25833",
+      "EPSG:25835",
+      "EPSG:32632",
+      "EPSG:32633",
+      "EPSG:32635",
+      "EPSG:32661",
+      "EPSG:3575",
+      "EPSG:5041",
+      "EPSG:5042"
+    ],
+    "name": "MS",
+    "title": "WMS Arome Arctic"
+  },
+  "service": {
+    "name": "WMS",
+    "online_resource": "http://localhost/api/get_quicklooktests/data/test_arome_arctic.nc?",
+    "title": "WMS Arome Arctic"
+  }
+}
