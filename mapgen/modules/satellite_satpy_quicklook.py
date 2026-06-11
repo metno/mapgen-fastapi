@@ -32,7 +32,7 @@ from datetime import datetime
 #from urllib.parse import parse_qs
 
 from mapgen.modules.helpers import handle_request
-from mapgen.modules.helpers import _parse_request, HTTPError
+from mapgen.modules.helpers import _parse_request, HTTPError, WMS_SRS_SUPPORTED
 
 boto3.set_stream_logger('botocore', logging.CRITICAL)
 boto3.set_stream_logger('boto3', logging.CRITICAL)
@@ -181,7 +181,7 @@ def _fill_metadata_to_mapfile(orig_netcdf_path, map_object, url_scheme, netloc):
     """"Add all needed web metadata to the generated map file."""
     map_object.web.metadata.set("wms_title", "WMS senda fastapi")
     map_object.web.metadata.set("wms_onlineresource", f"{url_scheme}://{netloc}/api/get_quicklook{orig_netcdf_path}")
-    map_object.web.metadata.set("wms_srs", "EPSG:3857 EPSG:3978 EPSG:4269 EPSG:4326 EPSG:25832 EPSG:25833 EPSG:25835 EPSG:32632 EPSG:32633 EPSG:32635 EPSG:32661")
+    map_object.web.metadata.set("wms_srs", WMS_SRS_SUPPORTED)
     map_object.web.metadata.set("wms_enable_request", "*")
     map_object.setProjection("AUTO")
     map_object.setSize(10000, 10000)
