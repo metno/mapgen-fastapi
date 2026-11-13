@@ -818,13 +818,6 @@ def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, la
             logger.exception(f"Problems in setting styles: {ex}")
     else:
         layer.classgroup = 'raster'
-        s = mapscript.classObj(layer)
-        s.name = "contour"
-        s.group = "contour"
-        style = mapscript.styleObj(s)
-        style.rangeitem = 'pixel'
-        style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
-        style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
 
         s1 = mapscript.classObj(layer)
         s1.name = "Linear grayscale using min and max not nan from data"
@@ -833,6 +826,14 @@ def _generate_getcapabilities(layer, ds, variable, shared_cache, netcdf_file, la
         style1.rangeitem = 'pixel'
         style1.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
         style1.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
+
+        s = mapscript.classObj(layer)
+        s.name = "contour"
+        s.group = "contour"
+        style = mapscript.styleObj(s)
+        style.rangeitem = 'pixel'
+        style.mincolor = mapscript.colorObj(red=0, green=0, blue=0)
+        style.maxcolor = mapscript.colorObj(red=255, green=255, blue=255)
 
     layer.template = os.path.join(_get_mapfiles_path(product_config), "templatename")
 

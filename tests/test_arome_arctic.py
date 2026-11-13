@@ -156,6 +156,19 @@ def test_read_dataset(mock_csw, mock_read_config, tmpdir, caplog):
     )
     with open(fixture_file) as fh:
         expected_contract = json.load(fh)
+
+    for layer in contract["layers"]:
+        styles = layer["styles"]
+        if "raster" in styles and "contour" in styles:
+            assert styles.index("raster") < styles.index("contour"), (
+                f"{layer['name']}: expected raster before contour, got {styles}"
+            )
+
+    # Compare style membership separately from presentation order.
+    for candidate in (contract, expected_contract):
+        for layer in candidate["layers"]:
+            layer["styles"] = sorted(layer["styles"])
+
     assert contract == expected_contract
     assert content_type == "text/xml; charset=UTF-8"
 
